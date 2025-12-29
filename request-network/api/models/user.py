@@ -58,8 +58,8 @@ class User(BaseModel):
         if request_type in self.blocked_request_types:
             return False
         
-        if not self.allowed_request_types:  # Empty list = allow all
-            return True
+        if not self.allowed_request_types:  # Empty list = allow NONE (Secure Default)
+            return False
         
         return request_type in self.allowed_request_types
 

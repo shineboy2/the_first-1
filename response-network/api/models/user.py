@@ -16,6 +16,7 @@ from sqlalchemy import (
     UUID,
     Integer,
     ARRAY,
+    ForeignKey,
 )
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 
@@ -42,10 +43,9 @@ class User(Base, TimestampMixin):
     monthly_request_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=2000)
     max_results_per_request: Mapped[int] = mapped_column(Integer, nullable=False, default=1000)
     allowed_indices: Mapped[List[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
-    profile_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    profile_type: Mapped[str] = mapped_column(String(50), ForeignKey("profile_type_configs.name"), nullable=False, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
-    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     
     # Relationships
     requests: Mapped[list["Request"]] = relationship("Request", back_populates="user", cascade="all, delete-orphan")

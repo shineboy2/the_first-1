@@ -81,6 +81,31 @@ def export_users_to_request_network():
             select(User).where(User.is_active == True)
         )
         users = result.scalars().all()
+
+        # Pre-fetch permissions mapping: Profile Name -> [Allowed Request Types]
+        # Valid profiles only (orphans get nothing)
+        perm_result = session.execute(
+            select(ProfileTypeRequestAccess, RequestType)
+            .join(RequestType, ProfileTypeRequestAccess.request_type_id == RequestType.id)
+            .where(ProfileTypeRequestAccess.is_active == True)
+        )
+        
+        # Build Map: {'agent': ['FlightBooking', 'HotelBooking'], 'admin': [...]}
+        profile_permissions = {}
+        for access, req_type in perm_result:
+            if access.profile_type_id not in profile_permissions:
+                profile_permissions[access.profile_type_id] = []
+            profile_permissions[access.profile_type_id].append(req_type.name)
+            
+        # Add 'admin' implicit permissions for bootstrap (or if creating admin via script)
+        # Though ideally this should be in DB, for now ensuring safety.
+        # Check if 'admin' profile exists in configs
+        admin_profile_check = session.execute(select(ProfileTypeConfig).where(ProfileTypeConfig.name == "admin")).scalar_one_or_none()
+        if admin_profile_check:
+             # Admin usually has access to everything, but let's respect the table.
+             # If table is empty for admin, they get nothing unless we hardcode loophole OR ensure table is populated.
+             # We assume table is populated correctly.
+             pass
         
         # Prepare export data
         export_data = {
@@ -94,8 +119,11 @@ def export_users_to_request_network():
                     "profile_type": user.profile_type or "user",
                     "is_active": user.is_active,
                     # Fields for Request Network with defaults
-                    "allowed_request_types": [],  # Empty by default
-                    "blocked_request_types": [],  # Empty by default
+                    "profile_type": user.profile_type or "user",
+                    "is_active": user.is_active,
+                    # Fields for Request Network with defaults
+                    "allowed_request_types": profile_permissions.get(user.profile_type, []),  # Sync actual permissions!
+                    "blocked_request_types": [],  # Empty by default (can execute blocked logic if needed)
                     "rate_limit_per_minute": 200,  # Default rate limit
                     "rate_limit_per_hour": 1000,
                     "rate_limit_per_day": 5000,
@@ -124,6 +152,28 @@ def export_users_to_request_network():
             with open(latest_file, 'w', encoding='utf-8') as f:
                 json.dump(export_data, f, indent=2, ensure_ascii=False)
             
+            # Update last export timestamp in DB
+            # datetime is already imported at module level
+            
+            # Check if setting exists
+            ts_result = session.execute(
+                select(Settings).where(Settings.key == "last_user_export_at")
+            )
+            ts_setting = ts_result.scalar_one_or_none()
+            
+            if ts_setting:
+                ts_setting.value = {"exported_at": export_data["exported_at"], "count": len(users)}
+                ts_setting.updated_at = datetime.utcnow()
+            else:
+                ts_setting = Settings(
+                    key="last_user_export_at",
+                    value={"exported_at": export_data["exported_at"], "count": len(users)},
+                    description="Last successful user export timestamp",
+                    is_public=True
+                )
+                session.add(ts_setting)
+            session.commit()
+
             return {
                 "status": "success",
                 "exported_at": export_data["exported_at"],

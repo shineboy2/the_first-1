@@ -24,12 +24,17 @@ EXPORT_PATH = Path(settings.EXPORT_DIR) / "results"
 @shared_task(bind=True, max_retries=3)
 def export_completed_results(self):
     """Export completed request results to request network."""
+    import asyncio
+    from services.export_storage import ExportStorageService
+    from models.settings import Settings as SettingsModel
+
     db = SessionLocal()
     try:
-        EXPORT_PATH.mkdir(parents=True, exist_ok=True)
+        # Get dynamic export config
+        config_setting = db.query(SettingsModel).filter(SettingsModel.key == "export_config").first()
+        export_config = config_setting.value if config_setting else None
 
         # Get results that haven't been exported
-        # We join with IncomingRequest to ensure we have the original request info
         results = db.query(QueryResult).join(IncomingRequest).filter(
             QueryResult.exported_at.is_(None)
         ).limit(50).all()
@@ -52,13 +57,21 @@ def export_completed_results(self):
                 "exported_at": datetime.utcnow().isoformat()
             })
             
-        # Write to JSONL file
-        filename = f"results_{timestamp}.jsonl"
-        export_file = EXPORT_PATH / filename
+        # Write to JSONL string/bytes
+        jsonl_content = ""
+        for item in export_list:
+            jsonl_content += json.dumps(item) + "\n"
         
-        with open(export_file, "w", encoding="utf-8") as f:
-            for item in export_list:
-                f.write(json.dumps(item) + "\n")
+        filename = f"results_{timestamp}.jsonl"
+        
+        # Execute async storage save
+        saved_path = asyncio.run(
+            ExportStorageService.save_export_file(
+                filename, 
+                jsonl_content.encode("utf-8"), 
+                export_config
+            )
+        )
         
         # Mark as exported
         for res in results:
@@ -70,7 +83,7 @@ def export_completed_results(self):
         return {
             "status": "success",
             "count": len(results),
-            "file": str(export_file),
+            "file": saved_path,
             "batch_id": str(batch_id)
         }
             

@@ -129,6 +129,35 @@ async def update_export_config(
     return db_setting
 
 
+@router.put("/system/import_config", response_model=SettingsSchema, dependencies=[Depends(get_current_admin_user)])
+async def update_import_config(
+    config: dict,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """
+    Update import configuration (Local/FTP).
+    Example config: {"type": "ftp", "host": "...", "path": "upload"}
+    """
+    key = "import_config"
+    result = await db.execute(select(SettingsModel).where(SettingsModel.key == key))
+    db_setting = result.scalar_one_or_none()
+    
+    if db_setting:
+        db_setting.value = config
+    else:
+        db_setting = SettingsModel(
+            key=key,
+            value=config,
+            description="Dynamic Import Configuration (Local/FTP)",
+            is_public=False
+        )
+        db.add(db_setting)
+        
+    await db.commit()
+    await db.refresh(db_setting)
+    return db_setting
+
+
 @router.post("/system/trigger_export", dependencies=[Depends(get_current_admin_user)])
 async def trigger_export():
     """Trigger user export task manually."""

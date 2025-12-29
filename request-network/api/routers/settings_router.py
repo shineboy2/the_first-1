@@ -24,9 +24,6 @@ async def update_import_config(
     Example config: {"type": "local", "path": "/imports"} or {"type": "ftp", "host": "...", ...}
     """
     key = "import_config"
-    # Use sync-style execution for simple updates if AsyncSession is not mandatory or wrap in async
-    # For Request Network which might be Sync or Async, we'll try to follow existing patterns.
-    # Assuming get_db_session returns an AsyncSession based on previous files.
     
     result = await db.execute(select(SettingsModel).where(SettingsModel.key == key))
     db_setting = result.scalar_one_or_none()
@@ -47,6 +44,36 @@ async def update_import_config(
     
     # Trigger an immediate import check to verify config
     import_users_from_response_network.delay()
+    
+    return db_setting
+
+@router.put("/system/export_config", response_model=SettingsSchema)
+async def update_export_config(
+    config: dict,
+    db: Session = Depends(get_db_session)
+):
+    """
+    Update export configuration (Local/FTP).
+    Example config: {"type": "ftp", "host": "...", ...}
+    """
+    key = "export_config"
+    
+    result = await db.execute(select(SettingsModel).where(SettingsModel.key == key))
+    db_setting = result.scalar_one_or_none()
+    
+    if db_setting:
+        db_setting.value = config
+    else:
+        db_setting = SettingsModel(
+            key=key,
+            value=config,
+            description="Dynamic Export Configuration (Local/FTP)",
+            is_public=False
+        )
+        db.add(db_setting)
+        
+    await db.commit()
+    await db.refresh(db_setting)
     
     return db_setting
 

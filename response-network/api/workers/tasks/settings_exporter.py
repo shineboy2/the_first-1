@@ -24,6 +24,13 @@ def export_settings_to_request_network():
                 select(Settings).where(Settings.is_public == True)
             )
             settings_list = result.scalars().all()
+
+            # Retrieve dynamic export configuration
+            config_result = await db.execute(
+                select(Settings).where(Settings.key == "export_config")
+            )
+            config_setting = config_result.scalar_one_or_none()
+            config = config_setting.value if config_setting else None
             
             # Prepare export data
             export_data = {
@@ -45,7 +52,7 @@ def export_settings_to_request_network():
             # Save using ExportStorageService
             filename = f"settings_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
             json_data = json.dumps(export_data, indent=2, default=str).encode('utf-8')
-            file_path = await ExportStorageService.save_export_file(filename, json_data)
+            file_path = await ExportStorageService.save_export_file(filename, json_data, config)
             
             return {
                 "status": "success",

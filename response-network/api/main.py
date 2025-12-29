@@ -50,16 +50,7 @@ from auth.dependencies import oauth2_scheme
 # Set all CORS enabled origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:3001",
-        "http://0.0.0.0:3000",
-        "http://0.0.0.0:3001",
-        "http://192.168.214.139:3000",
-        "http://192.168.214.139:3001",
-    ],
+        "*",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],

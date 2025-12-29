@@ -34,11 +34,8 @@ class ExportStorageService:
             else:
                 return await ExportStorageService._save_to_local_dynamic(filename, data, config)
 
-        # Fallback to static settings
-        if settings.EXPORT_DESTINATION_TYPE == "ftp":
-            return await ExportStorageService._save_to_ftp(filename, data)
-        else:
-            return await ExportStorageService._save_to_local(filename, data)
+        # Fallback to static settings (only local for request network usually, but could be extended)
+        return await ExportStorageService._save_to_local(filename, data)
     
     @staticmethod
     async def _save_to_local(filename: str, data: bytes) -> str:
@@ -57,33 +54,6 @@ class ExportStorageService:
         Path(tmp_path).unlink()
         
         return str(Path(settings.EXPORT_DIR) / filename)
-    
-    @staticmethod
-    async def _save_to_ftp(filename: str, data: bytes) -> str:
-        """Save file to FTP server."""
-        ftp_settings = {
-            "host": settings.EXPORT_FTP_HOST,
-            "port": settings.EXPORT_FTP_PORT,
-            "username": settings.EXPORT_FTP_USERNAME,
-            "password": settings.EXPORT_FTP_PASSWORD,
-            "base_path": settings.EXPORT_FTP_PATH,
-            "use_tls": settings.EXPORT_FTP_USE_TLS,
-        }
-        
-        handler = FTPStorageHandler(ftp_settings)
-        
-        # Write to temp file first
-        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(filename).suffix) as tmp:
-            tmp.write(data)
-            tmp_path = tmp.name
-        
-        # Upload to FTP
-        await handler.upload_file(tmp_path, filename)
-        
-        # Clean up temp file
-        Path(tmp_path).unlink()
-        
-        return f"ftp://{settings.EXPORT_FTP_HOST}{settings.EXPORT_FTP_PATH}/{filename}"
 
     @staticmethod
     async def _save_to_local_dynamic(filename: str, data: bytes, config: dict) -> str:

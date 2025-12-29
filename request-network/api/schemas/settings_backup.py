@@ -1,10 +1,13 @@
 from datetime import datetime
+from uuid import UUID
 from typing import List
 
 from pydantic import BaseModel, Field
 
+from schemas.base import CamelModel
 
-class SettingsBase(BaseModel):
+
+class SettingsBase(CamelModel):
     """Base settings schema."""
     key: str
     value: dict
@@ -27,38 +30,16 @@ class SettingsUpdate(SettingsBase):
 
 class Settings(SettingsBase):
     """Schema for reading settings."""
-    id: str | int
-    created_at: datetime
+    id: str | None | UUID | None = None
+    created_at: datetime | None = None
     updated_at: datetime | None = None
 
     class Config:
         from_attributes = True
 
 
-class SettingsExport(BaseModel):
-    """Schema for settings export file."""
+class SettingsImport(BaseModel):
+    """Schema for settings import file."""
     settings: List[Settings]
-    exported_at: datetime = Field(description="UTC timestamp of export")
+    exported_at: datetime = Field(description="UTC timestamp of when export was created")
     version: int = Field(description="Export format version")
-
-
-# User Settings
-class UserSettingCreate(BaseModel):
-    """Schema for creating user settings."""
-    key: str
-    value: dict
-
-
-class UserSettingUpdate(BaseModel):
-    """Schema for updating user settings."""
-    value: dict
-
-
-class UserSettingRead(BaseModel):
-    """Schema for reading user settings."""
-    key: str
-    value: dict
-    user_id: str
-
-    class Config:
-        from_attributes = True

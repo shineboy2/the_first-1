@@ -23,7 +23,7 @@ class ImportStorageService:
     @staticmethod
     def read_latest_file(db: Session, resource_type: str) -> dict:
         """
-        Read the latest import file for a resource type (e.g., 'users').
+        Read the latest import file for a resource type (e.g., 'requests').
         Abstraacts away Local vs FTP logic.
         """
         config = ImportStorageService.get_import_config(db)
@@ -71,13 +71,18 @@ class ImportStorageService:
                     # List all files
                     files = ftp.nlst()
                     
-                    extension = ".jsonl" if resource_type == "results" else ".json"
+                    # Filter for resource type (e.g. 'requests_') and exclude 'latest.json' if needed
+                    # Request Network exports 'requests_2025...jsonl' (Note: JSONL, not JSON)
+                    # We might need to handle .jsonl extension specifically or generically
+                    
+                    # Request Network exports as .jsonl
+                    extension = ".jsonl" if resource_type == "requests" else ".json"
+                    
                     candidates = [f for f in files if f.startswith(f"{resource_type}_") and f.endswith(extension)]
                     
                     if not candidates:
-                        # Fallback to latest.json ONLY if explicitly checking for it or if no timestamped files
-                        if "latest.json" in files and resource_type not in ["settings"]: 
-                            # 'settings' specifically collides with user export, so we strictly avoid latest.json for it
+                        # Fallback for legacy or static files
+                        if "latest.json" in files and resource_type not in ["requests", "settings"]: 
                             target_file = "latest.json"
                         else:
                             logger.info(f"No entry found for {resource_type} in {remote_path}")
@@ -91,11 +96,19 @@ class ImportStorageService:
                     ftp.retrbinary(f"RETR {target_file}", bio.write)
                 
                 bio.seek(0)
-                if resource_type == "results":
-                     lines = bio.getvalue().decode('utf-8').splitlines()
-                     return [json.loads(line) for line in lines if line.strip()]
+                
+                # Handle JSON vs JSONL
+                if resource_type == "requests":
+                    # For JSONL, we return a list of dicts
+                    # The ImportStorageService usually returns a single dict (for json).
+                    # We should adapt the caller or this method.
+                    # Given the abstraction, it's safer to return parsed data.
+                    # For JSONL:
+                    lines = bio.getvalue().decode('utf-8').splitlines()
+                    return [json.loads(line) for line in lines if line.strip()]
                 else:
-                     return json.load(bio)
+                    return json.load(bio)
+                    
             except Exception as e:
                 logger.error(f"FTP Download failed from {host}:{remote_path}: {e}")
                 return None

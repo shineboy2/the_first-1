@@ -21,7 +21,7 @@ class ProfileTypeConfigBase(BaseModel):
 
 class ProfileTypeConfigCreate(ProfileTypeConfigBase):
     """Schema for creating a profile type"""
-    name: str = Field(..., min_length=1, max_length=50, pattern="^[a-z_]+$")
+    name: str = Field(..., min_length=1, max_length=50, pattern="^[a-zA-Z0-9_-]+$")
 
 
 class ProfileTypeConfigUpdate(BaseModel):

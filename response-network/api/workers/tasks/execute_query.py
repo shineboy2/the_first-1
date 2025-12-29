@@ -77,13 +77,24 @@ def execute_pending_queries(self):
                 base_url = str(settings.ELASTICSEARCH_URL).rstrip('/')
                 es_url = f"{base_url}/{index_name}/_search"
                 
-                import requests
-                response = requests.post(es_url, json=query_body, timeout=10)
+                import urllib.request
+                import urllib.error
                 
-                if response.status_code >= 400:
-                     raise Exception(f"Elasticsearch Error ({response.status_code}): {response.text}")
+                req_data = json.dumps(query_body).encode('utf-8')
+                req_obj = urllib.request.Request(es_url, data=req_data, headers={'Content-Type': 'application/json'})
                 
-                es_result = response.json()
+                try:
+                    with urllib.request.urlopen(req_obj, timeout=10.0) as f:
+                        response_body = f.read().decode('utf-8')
+                        es_result = json.loads(response_body)
+                except urllib.error.HTTPError as e:
+                     if e.code == 404:
+                         # Index not found or similar -> Treat as empty result
+                         es_result = {"hits": {"total": {"value": 0}, "hits": []}, "took": 0}
+                     else:
+                         raise Exception(f"Elasticsearch Error ({e.code}): {e.read().decode('utf-8')}")
+                except Exception as e:
+                     raise Exception(f"Elasticsearch Connection Error: {str(e)}")
                 
                 # Transform Result
                 hits = es_result.get("hits", {}).get("hits", [])

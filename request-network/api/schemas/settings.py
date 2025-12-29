@@ -1,4 +1,5 @@
 from datetime import datetime
+from uuid import UUID
 from typing import List
 
 from pydantic import BaseModel, Field
@@ -29,7 +30,7 @@ class SettingsUpdate(SettingsBase):
 
 class Settings(SettingsBase):
     """Schema for reading settings."""
-    id: str | None = None
+    id: str | None | UUID | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -41,4 +42,4 @@ class SettingsImport(BaseModel):
     """Schema for settings import file."""
     settings: List[Settings]
     exported_at: datetime = Field(description="UTC timestamp of when export was created")
-    version: int = Field(description="Export format version")
+    version: int = Field(default=1, description="Export format version")
