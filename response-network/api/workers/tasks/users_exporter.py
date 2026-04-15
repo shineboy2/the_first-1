@@ -1,5 +1,5 @@
 """
-Users export task - Export users to request-network
+Users export task - Export users to request-network (Improved)
 """
 from datetime import datetime
 import json
@@ -8,6 +8,7 @@ import os
 from dotenv import load_dotenv
 import ftplib
 import io
+import logging
 
 from celery import shared_task
 from sqlalchemy import create_engine, select
@@ -18,7 +19,6 @@ load_dotenv()
 
 # Import Settings model
 from models.settings import Settings
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models.user import User
+
 # Import all models to resolve dependencies
 from models.profile_type import ProfileType  # noqa
 from models.request_type import RequestType  # noqa
@@ -36,6 +37,7 @@ from models.profile_type_config import ProfileTypeConfig  # noqa
 @shared_task
 def export_users_to_request_network():
     """Export all active users to Request Network."""
+    logger.info("Starting user export task...")
     
     # Build database URL from env
     db_user = os.getenv("RESPONSE_DB_USER", "postgres")
@@ -44,7 +46,7 @@ def export_users_to_request_network():
     db_port = os.getenv("RESPONSE_DB_PORT", "5432")
     db_name = os.getenv("RESPONSE_DB_NAME", "response_network")
     
-    database_url = f"postgresql+psycopg://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+    database_url = f"postgresql+psycopg2://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
     
     # Create sync engine and session
     engine = create_engine(database_url)
@@ -63,50 +65,33 @@ def export_users_to_request_network():
             return {"status": "skipped", "reason": "export_config_missing"}
 
         config = config_setting.value
-        export_type = config.get("type", "local")
-        
-        # Determine Export Path
-        if export_type == "local":
-            export_path = Path(config.get("path", "/app/exports/users"))
-        elif export_type == "ftp":
-            # For phase 10, we will just simulate FTP by using a local temp path currently
-            # Real implementation would use ftplib here based on creds
-            export_path = Path("/tmp/ftp_exports/users") 
-        else:
-             logger.error(f"Unknown export type: {export_type}")
-             return {"status": "error", "reason": f"unknown_type_{export_type}"}
+        if not config.get("enabled", False):
+             logger.info("User export is disabled in configuration.")
+             return {"status": "skipped", "reason": "disabled"}
+
+        export_type = config.get("storage_type", "local")
+        logger.info(f"Export type determined as: {export_type}")
 
         # Get all active users
         result = session.execute(
             select(User).where(User.is_active == True)
         )
         users = result.scalars().all()
+        logger.info(f"Found {len(users)} active users to export.")
 
-        # Pre-fetch permissions mapping: Profile Name -> [Allowed Request Types]
-        # Valid profiles only (orphans get nothing)
+        # Pre-fetch permissions mapping
         perm_result = session.execute(
             select(ProfileTypeRequestAccess, RequestType)
             .join(RequestType, ProfileTypeRequestAccess.request_type_id == RequestType.id)
             .where(ProfileTypeRequestAccess.is_active == True)
         )
         
-        # Build Map: {'agent': ['FlightBooking', 'HotelBooking'], 'admin': [...]}
         profile_permissions = {}
         for access, req_type in perm_result:
             if access.profile_type_id not in profile_permissions:
                 profile_permissions[access.profile_type_id] = []
             profile_permissions[access.profile_type_id].append(req_type.name)
             
-        # Add 'admin' implicit permissions for bootstrap (or if creating admin via script)
-        # Though ideally this should be in DB, for now ensuring safety.
-        # Check if 'admin' profile exists in configs
-        admin_profile_check = session.execute(select(ProfileTypeConfig).where(ProfileTypeConfig.name == "admin")).scalar_one_or_none()
-        if admin_profile_check:
-             # Admin usually has access to everything, but let's respect the table.
-             # If table is empty for admin, they get nothing unless we hardcode loophole OR ensure table is populated.
-             # We assume table is populated correctly.
-             pass
-        
         # Prepare export data
         export_data = {
             "users": [
@@ -118,18 +103,14 @@ def export_users_to_request_network():
                     "full_name": user.full_name if hasattr(user, 'full_name') else None,
                     "profile_type": user.profile_type or "user",
                     "is_active": user.is_active,
-                    # Fields for Request Network with defaults
-                    "profile_type": user.profile_type or "user",
-                    "is_active": user.is_active,
-                    # Fields for Request Network with defaults
-                    "allowed_request_types": profile_permissions.get(user.profile_type, []),  # Sync actual permissions!
-                    "blocked_request_types": [],  # Empty by default (can execute blocked logic if needed)
-                    "rate_limit_per_minute": 200,  # Default rate limit
+                    "allowed_request_types": profile_permissions.get(user.profile_type, []),
+                    "blocked_request_types": [],
+                    "rate_limit_per_minute": 200,
                     "rate_limit_per_hour": 1000,
                     "rate_limit_per_day": 5000,
                     "daily_request_limit": getattr(user, 'daily_request_limit', 1000),
                     "monthly_request_limit": getattr(user, 'monthly_request_limit', 10000),
-                    "priority": 5,  # Default priority
+                    "priority": 5,
                     "created_at": user.created_at.isoformat() if user.created_at else None,
                     "updated_at": user.updated_at.isoformat() if user.updated_at else None
                 }
@@ -139,54 +120,28 @@ def export_users_to_request_network():
             "total_count": len(users),
         }
         
-        # Save to latest.json
-        latest_file = export_path / "latest.json"
+        filename = "latest.json"
         
         if export_type == "local":
-            # Ensure export directory exists
-            if not export_path.parent.exists():
-                export_path.parent.mkdir(parents=True, exist_ok=True)
+            export_path = Path(config.get("local_path", "/app/exports/users"))
             if not export_path.exists():
                  export_path.mkdir(parents=True, exist_ok=True)
-                 
+            
+            latest_file = export_path / filename
             with open(latest_file, 'w', encoding='utf-8') as f:
                 json.dump(export_data, f, indent=2, ensure_ascii=False)
             
-            # Update last export timestamp in DB
-            # datetime is already imported at module level
+            logger.info(f"Exported users locally to {latest_file}")
             
-            # Check if setting exists
-            ts_result = session.execute(
-                select(Settings).where(Settings.key == "last_user_export_at")
-            )
-            ts_setting = ts_result.scalar_one_or_none()
-            
-            if ts_setting:
-                ts_setting.value = {"exported_at": export_data["exported_at"], "count": len(users)}
-                ts_setting.updated_at = datetime.utcnow()
-            else:
-                ts_setting = Settings(
-                    key="last_user_export_at",
-                    value={"exported_at": export_data["exported_at"], "count": len(users)},
-                    description="Last successful user export timestamp",
-                    is_public=True
-                )
-                session.add(ts_setting)
-            session.commit()
-
-            return {
-                "status": "success",
-                "exported_at": export_data["exported_at"],
-                "total_count": len(users),
-                "file": str(latest_file),
-                "config_used": export_type
-            }
-        
         elif export_type == "ftp":
-            host = config.get("host")
-            user = config.get("user")
-            passwd = config.get("password")
-            remote_path = config.get("path", "/users")
+            host = config.get("ftp_host")
+            user = config.get("ftp_user")
+            passwd = config.get("ftp_password")
+            port = config.get("ftp_port", 21)
+            remote_path = config.get("ftp_path", "/uploads/users")
+            use_tls = config.get("ftp_use_tls", False)
+            
+            logger.info(f"Connecting to FTP: {host}:{port} as {user}")
             
             if not host:
                 return {"status": "error", "reason": "ftp_host_missing"}
@@ -196,33 +151,68 @@ def export_users_to_request_network():
                 json_data = json.dumps(export_data, indent=2, ensure_ascii=False).encode('utf-8')
                 bio = io.BytesIO(json_data)
                 
-                with ftplib.FTP(host) as ftp:
-                    ftp.login(user=user, passwd=passwd)
-                    # Try to change to remote path, create if not exist (simple version)
-                    try:
-                        ftp.cwd(remote_path)
-                    except ftplib.error_perm:
-                        # Try to create directories one by one or just assume they exist for now
-                        # FTP doesn't have mkdir -p usually, so we'll just try to mkdir the last part
-                        try:
-                            ftp.mkd(remote_path)
-                            ftp.cwd(remote_path)
-                        except:
-                            pass
-                    
-                    ftp.storbinary(f"STOR latest.json", bio)
+                # Connect to FTP server
+                if use_tls:
+                    ftp = ftplib.FTP_TLS()
+                else:
+                    ftp = ftplib.FTP()
                 
-                return {
-                    "status": "success",
-                    "exported_at": export_data["exported_at"],
-                    "total_count": len(users),
-                    "method": "ftp",
-                    "destination": f"ftp://{host}{remote_path}/latest.json"
-                }
+                ftp.connect(host, port)
+                ftp.login(user=user, passwd=passwd)
+                
+                # Try to clean up messy simulated paths if they exist
+                if remote_path == "/users/": # Handle trailing slash
+                    remote_path = "/users"
+                
+                # Try to change to remote path
+                try:
+                    ftp.cwd(remote_path)
+                except ftplib.error_perm:
+                    logger.info(f"Path {remote_path} not found, trying to create...")
+                    try:
+                        ftp.mkd(remote_path)
+                        ftp.cwd(remote_path)
+                    except Exception as e:
+                        logger.warning(f"Failed to create directory {remote_path}: {e}")
+                        # Fallback to root if fails? No, keep raising or let it fail.
+                
+                ftp.storbinary(f"STOR {filename}", bio)
+                ftp.quit()
+                
+                logger.info(f"Successfully uploaded {filename} to FTP server at {remote_path}")
+                
             except Exception as e:
                 logger.error(f"FTP Upload failed: {e}")
                 return {"status": "error", "reason": f"ftp_failed: {str(e)}"}
+        
+        # Update last export timestamp in DB
+        ts_result = session.execute(
+            select(Settings).where(Settings.key == "last_user_export_at")
+        )
+        ts_setting = ts_result.scalar_one_or_none()
+        
+        if ts_setting:
+            ts_setting.value = {"exported_at": export_data["exported_at"], "count": len(users)}
+            ts_setting.updated_at = datetime.utcnow()
+        else:
+            ts_setting = Settings(
+                key="last_user_export_at",
+                value={"exported_at": export_data["exported_at"], "count": len(users)},
+                description="Last successful user export timestamp",
+                is_public=True
+            )
+            session.add(ts_setting)
+        session.commit()
+        
+        return {
+            "status": "success",
+            "exported_at": export_data["exported_at"],
+            "total_count": len(users),
+            "method": export_type
+        }
+
+    except Exception as e:
+        logger.error(f"User export task failed: {e}")
+        return {"status": "error", "reason": str(e)}
     finally:
         session.close()
-
-

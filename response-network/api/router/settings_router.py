@@ -100,62 +100,8 @@ async def get_current_export_settings(
     }
 
 
-@router.put("/system/export_config", response_model=SettingsSchema, dependencies=[Depends(get_current_admin_user)])
-async def update_export_config(
-    config: dict,
-    db: AsyncSession = Depends(get_db_session)
-):
-    """
-    Update export configuration (Local/FTP).
-    Example config: {"type": "local", "path": "/exports"} or {"type": "ftp", "host": "...", ...}
-    """
-    key = "export_config"
-    result = await db.execute(select(SettingsModel).where(SettingsModel.key == key))
-    db_setting = result.scalar_one_or_none()
-    
-    if db_setting:
-        db_setting.value = config
-    else:
-        db_setting = SettingsModel(
-            key=key,
-            value=config,
-            description="Dynamic Export Configuration (Local/FTP)",
-            is_public=False
-        )
-        db.add(db_setting)
-        
-    await db.commit()
-    await db.refresh(db_setting)
-    return db_setting
-
-
-@router.put("/system/import_config", response_model=SettingsSchema, dependencies=[Depends(get_current_admin_user)])
-async def update_import_config(
-    config: dict,
-    db: AsyncSession = Depends(get_db_session)
-):
-    """
-    Update import configuration (Local/FTP).
-    Example config: {"type": "ftp", "host": "...", "path": "upload"}
-    """
-    key = "import_config"
-    result = await db.execute(select(SettingsModel).where(SettingsModel.key == key))
-    db_setting = result.scalar_one_or_none()
-    
-    if db_setting:
-        db_setting.value = config
-    else:
-        db_setting = SettingsModel(
-            key=key,
-            value=config,
-            description="Dynamic Import Configuration (Local/FTP)",
-            is_public=False
-        )
-        db.add(db_setting)
-        
-    await db.commit()
-    await db.refresh(db_setting)
-    return db_setting
+# NOTE: export_config and import_config endpoints moved to storage_config_router
+# Use /api/v1/settings/storage/ for all storage configurations
 
 
 @router.post("/system/trigger_export", dependencies=[Depends(get_current_admin_user)])
@@ -181,7 +127,11 @@ async def create_setting(
             detail=f"Setting with key '{setting.key}' already exists"
         )
 
-    db_setting = SettingsModel(**setting.model_dump())
+    # Map is_active to is_public (schema/model mismatch)
+    setting_data = setting.model_dump()
+    setting_data['is_public'] = setting_data.pop('is_active', False)
+    
+    db_setting = SettingsModel(**setting_data)
     db.add(db_setting)
     await db.commit()
     await db.refresh(db_setting)

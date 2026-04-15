@@ -45,6 +45,12 @@ yarn-error.log*
 # Docker
 data/
 logs/
+shared_data/
+
+# Logs and temporary files
+*.log
+sql_query.sql
+test_ext_api.py
 
 # IDE / OS specific
 .vscode/

@@ -9,12 +9,12 @@ from sqlalchemy.orm import selectinload
 from core.validation import validate_request_payload
 from core.rate_limiter import RateLimiter
 from db.session import get_db_session
-from db.redis_client import get_redis_client
+
 from models.user import User
 from models.request import Request
 from models.response import Response
 from auth.dependencies import get_current_active_user
-# from rate_limiter import check_rate_limit  # TODO: Fix rate limiter
+
 from schemas.request import RequestCreate, RequestPublic, RequestStatus
 from schemas.response import ResponseDetailed
 
@@ -66,13 +66,29 @@ async def submit_request(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=rate_limit_message
         )
+    
+    # 3.5 Extract query_params from fieldRequest
+    # If user sends {"query_params": {"param1": "value1"}}, extract inner dict
+    # Otherwise use fieldRequest as-is for backward compatibility
+    field_request = request_data.request.fieldRequest
+    if isinstance(field_request, dict) and "query_params" in field_request and len(field_request) == 1:
+        query_params_value = field_request["query_params"]
+    else:
+        query_params_value = field_request
+    
+    # 3.6 Validate query parameters (logging only, doesn't block)
+    from services.parameter_validator import ParameterValidator
+    ParameterValidator.validate_and_log(
+        query_params=query_params_value,
+        query_type=request_type
+    )
 
     # 4. Create request object
     new_request = Request(
         user_id=current_user.id,
         name=request_data.name,
         query_type=request_type,
-        query_params=request_data.request.fieldRequest,
+        query_params=query_params_value,
         priority=current_user.priority,  # Inherit priority from user profile
         status=request_data.reqState.lower(),
     )
@@ -170,13 +186,7 @@ async def get_request_response(
     db: AsyncSession = Depends(get_db_session),
 ):
     """
-    Retrieve the response for a completed request with Redis caching support.
-    
-    This endpoint:
-    1. Checks Redis cache first (fast path)
-    2. Falls back to database if not cached
-    3. Caches the result in Redis for 24 hours
-    4. Returns 404 if request doesn't exist or has no response yet
+    Retrieve the response for a completed request.
     
     Returns:
     - ResponseDetailed with full result_data, execution time, etc.
@@ -185,14 +195,7 @@ async def get_request_response(
     """
     request = await get_request_or_404(request_id, current_user, db)
     
-    # Try to get from Redis cache first
-    redis_client = await get_redis_client()
-    cached_response = await redis_client.get_response(str(request_id))
-    
-    if cached_response:
-        return ResponseDetailed(**cached_response)
-    
-    # If not in cache, get from database
+    # Get response from database
     response_query = select(Response).where(Response.request_id == request_id)
     response_result = await db.execute(response_query)
     response = response_result.scalar_one_or_none()
@@ -203,17 +206,7 @@ async def get_request_response(
             detail="Response not available yet. Request is still being processed."
         )
     
-    # Convert to schema
-    response_data = ResponseDetailed.model_validate(response)
-    
-    # Cache the response in Redis
-    await redis_client.set_response(
-        str(request_id),
-        response_data.model_dump(),
-        ttl_hours=24
-    )
-    
-    return response_data
+    return ResponseDetailed.model_validate(response)
 
 
 @router.delete(

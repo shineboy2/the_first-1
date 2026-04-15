@@ -39,7 +39,7 @@ async def get_system_stats(
     # 1. Get user stats
     user_stats_stmt = select(
         func.count(User.id).label("total_users"),
-        func.count(case((User.is_active, 1))).label("active_users")
+        func.count(case((User.is_active == True, 1), else_=None)).label("active_users")
     )
     user_stats_result = (await db.execute(user_stats_stmt)).one()
 
@@ -56,6 +56,43 @@ async def get_system_stats(
     export_batch_count = await db.scalar(select(func.count(ExportBatch.id)))
     import_batch_count = await db.scalar(select(func.count(ImportBatch.id)))
 
+    # 4. Get requests by type
+    requests_by_type_stmt = select(
+        Request.query_type.label("type"),
+        func.count(Request.id).label("count")
+    ).group_by(Request.query_type)
+    requests_by_type_result = await db.execute(requests_by_type_stmt)
+    requests_by_type = [{"type": row.type, "count": row.count} for row in requests_by_type_result.all()]
+
+    # 5. Get user request stats
+    user_request_stats_stmt = select(
+        User.username.label("username"),
+        func.count(Request.id).label("total"),
+        func.sum(case((Request.status == 'completed', 1), else_=0)).label("completed")
+    ).outerjoin(Request).group_by(User.id)
+    user_request_stats_result = await db.execute(user_request_stats_stmt)
+    user_request_stats = [
+        {"username": row.username, "total": row.total, "completed": row.completed or 0} 
+        for row in user_request_stats_result.all() if row.total > 0
+    ]
+
+    # 6. Get request types active/inactive from filesystem
+    active_types = 0
+    inactive_types = 0
+    import_base = Path(settings.IMPORT_DIR)
+    request_types_path = import_base / "request_types" / "latest.json"
+    if request_types_path.exists():
+        try:
+            with open(request_types_path, "r") as f:
+                data = json.load(f)
+                for item in data:
+                    if item.get("is_active", False):
+                        active_types += 1
+                    else:
+                        inactive_types += 1
+        except Exception:
+            pass
+
     return SystemStats(
         total_users=user_stats_result.total_users,
         active_users=user_stats_result.active_users,
@@ -65,79 +102,37 @@ async def get_system_stats(
         failed_requests=request_stats_result.failed_requests,
         total_export_batches=export_batch_count or 0,
         total_import_batches=import_batch_count or 0,
+        requests_by_type=requests_by_type,
+        user_request_stats=user_request_stats,
+        request_types_stats={"active": active_types, "inactive": inactive_types}
     )
 
 
-@router.get("/cache/stats")
-async def get_cache_stats(
+from schemas.request import RequestPublic
+from typing import List
+
+@router.get("/requests", response_model=List[RequestPublic])
+async def get_all_requests(
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    skip: int = 0,
+    limit: int = 100,
     _: Annotated[None, Depends(require_admin)] = None
 ):
     """
-    Get Redis cache statistics.
-    
-    Returns:
-    - Status (connected/disconnected)
-    - Number of cached responses
-    - Memory usage
-    - Connected clients
+    Retrieve a list of all requests in the system.
+    Requires admin privileges.
     """
-    redis_client = await get_redis_client()
-    stats = await redis_client.get_cache_stats()
-    return stats
-
-
-@router.delete("/cache/clear")
-async def clear_all_cache(
-    _: Annotated[None, Depends(require_admin)] = None
-):
-    """
-    Clear all cached responses (admin only).
-    Use with caution - all cached data will be lost.
-    
-    Returns:
-    - Success message
-    - Number of entries cleared
-    """
-    redis_client = await get_redis_client()
-    
-    # Get stats before clearing
-    stats_before = await redis_client.get_cache_stats()
-    cleared_count = stats_before.get("response_cache_keys", 0)
-    
-    # Clear all cache
-    success = await redis_client.clear_all_cache()
-    
-    return {
-        "success": success,
-        "message": f"Cache cleared successfully" if success else "Failed to clear cache",
-        "entries_cleared": cleared_count
-    }
-
-
-@router.delete("/cache/user/{user_id}")
-async def clear_user_cache(
-    user_id: str,
-    _: Annotated[None, Depends(require_admin)] = None
-):
-    """
-    Invalidate all cached responses for a specific user (admin only).
-    
-    Args:
-        user_id: UUID of the user
-        
-    Returns:
-    - Success message
-    - Number of entries invalidated
-    """
-    redis_client = await get_redis_client()
-    deleted_count = await redis_client.invalidate_user_cache(user_id)
-    
-    return {
-        "success": True,
-        "message": f"User cache invalidated",
-        "entries_invalidated": deleted_count,
-        "user_id": user_id
-    }
+    from sqlalchemy.orm import selectinload
+    query = (
+        select(Request)
+        .order_by(Request.created_at.desc())
+        .options(selectinload(Request.response))
+        .offset(skip)
+        .limit(limit)
+    )
+    result = await db.execute(query)
+    requests = result.scalars().all()
+    return requests
 
 
 # ============================================================================
@@ -148,6 +143,7 @@ async def clear_user_cache(
 @router.get("/rate-limit/user/{user_id}/stats")
 async def get_user_rate_limit_stats(
     user_id: str,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
     _: Annotated[None, Depends(require_admin)] = None
 ):
     """
@@ -162,9 +158,8 @@ async def get_user_rate_limit_stats(
     rate_limiter = RateLimiter(redis_client.client)
     
     # Get user profile from database
-    db = next(get_db_session())
     user = await db.get(User, user_id)
-    profile = user.profile if user else "free"
+    profile = user.profile_type if user else "free"
     
     stats = await rate_limiter.get_user_stats(user_id, profile)
     return stats

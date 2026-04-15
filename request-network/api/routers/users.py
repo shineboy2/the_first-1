@@ -10,6 +10,7 @@ from datetime import datetime
 from db.session import get_db_session
 from models.user import User
 from pydantic import BaseModel
+from auth.dependencies import get_current_active_user
 
 from uuid import UUID
 
@@ -35,11 +36,20 @@ class UserResponse(BaseModel):
         from_attributes = True
 
 
+@router.get("/me", response_model=UserResponse)
+async def read_users_me(current_user: User = Depends(get_current_active_user)):
+    """
+    Get current logged in user details
+    """
+    return current_user
+
+
 @router.get("", response_model=List[UserResponse])
 async def list_users(
     skip: int = 0,
     limit: int = 100,
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     List all synced users in Request Network
@@ -54,7 +64,8 @@ async def list_users(
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(
     user_id: str,
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     Get a specific user by ID
@@ -71,7 +82,8 @@ async def get_user(
 @router.get("/username/{username}", response_model=UserResponse)
 async def get_user_by_username(
     username: str,
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     Get a user by username

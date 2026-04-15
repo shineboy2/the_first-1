@@ -41,8 +41,8 @@ const parameterSchema = z.object({
     description: z.string().optional(),
     parameter_type: z.string().min(1, "نوع الزامی است"),
     is_required: z.boolean(),
-    validation_rules: z.string().optional(),
-    placeholder_key: z.string().optional(),
+    validation_rules: z.union([z.record(z.any()), z.null()]).optional().transform(val => val === undefined || val === null || (typeof val === 'object' && Object.keys(val).length === 0) ? null : val),
+    placeholder_key: z.string().min(1, "کلید placeholder الزامی است"),
 });
 
 const formSchema = z.object({
@@ -158,7 +158,7 @@ export function ConfigureParametersDialog({
                                             description: "",
                                             parameter_type: "string",
                                             is_required: false,
-                                            validation_rules: "",
+                                            validation_rules: null,
                                             placeholder_key: "",
                                         })
                                     }
@@ -240,6 +240,20 @@ export function ConfigureParametersDialog({
                                                 <FormLabel>توضیحات</FormLabel>
                                                 <FormControl>
                                                     <Input {...field} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+
+                                    <FormField
+                                        control={form.control}
+                                        name={`parameters.${index}.placeholder_key`}
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>کلید Placeholder (برای استفاده در Query)</FormLabel>
+                                                <FormControl>
+                                                    <Input {...field} className="text-left" dir="ltr" placeholder="keyword" />
                                                 </FormControl>
                                                 <FormMessage />
                                             </FormItem>

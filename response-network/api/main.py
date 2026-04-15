@@ -18,11 +18,12 @@ from fastapi.security import OAuth2PasswordBearer
 from core.config import settings
 from db.session import get_db_session, async_session
 from router import request_router, system_router, user_router, monitoring_router, stats_router
-from router import auth_router, request_type_router, worker_settings, profile_type_router, settings_router
+from router import auth_router, request_type_router, worker_settings, profile_type_router, settings_router, admin_exports, storage_config_router
 from routers import admin_tasks
 from routers import admin_export_control
 from routers import admin_panel
 from routers import profile_type_access
+from routers import external_apis
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -48,14 +49,16 @@ app = FastAPI(
 from auth.dependencies import oauth2_scheme
 
 # Set all CORS enabled origins
-app.add_middleware(
-    CORSMiddleware,
-        "*",
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=["*"],
-    expose_headers=["Content-Type", "Content-Length"],
-)
+# Set all CORS enabled origins
+if settings.BACKEND_CORS_ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+        allow_headers=["*"],
+        expose_headers=["Content-Type", "Content-Length"],
+    )
 
 
 # Include routers with security scheme
@@ -96,6 +99,9 @@ app.include_router(auth_router, prefix=settings.API_V1_STR)
 # Worker settings router
 app.include_router(worker_settings.router, prefix=settings.API_V1_STR)
 
+# Storage configuration router
+app.include_router(storage_config_router.router, prefix=settings.API_V1_STR)
+
 # Settings router
 app.include_router(settings_router, prefix=settings.API_V1_STR, dependencies=[Depends(oauth2_scheme)])
 
@@ -105,14 +111,19 @@ app.include_router(profile_type_router.router, prefix=settings.API_V1_STR, depen
 # Admin tasks router (task queue management)
 app.include_router(admin_tasks.router, prefix=settings.API_V1_STR, dependencies=[Depends(oauth2_scheme)])
 
-# Admin export control router
-app.include_router(admin_export_control.router, dependencies=[Depends(oauth2_scheme)])
+# Admin export control router (DISABLED - replaced by admin_exports)
+# app.include_router(admin_export_control.router, dependencies=[Depends(oauth2_scheme)])
 
 # Admin panel monitoring router
 app.include_router(admin_panel.router, dependencies=[Depends(oauth2_scheme)])
 
 # Profile Type Access router
 app.include_router(profile_type_access.router, prefix=settings.API_V1_STR, dependencies=[Depends(oauth2_scheme)])
+
+app.include_router(external_apis.router, prefix=settings.API_V1_STR, dependencies=[Depends(oauth2_scheme)])
+
+# Admin Exports router (for Frontend compatibility)
+app.include_router(admin_exports.router, prefix=settings.API_V1_STR, dependencies=[Depends(oauth2_scheme)])
 
 
 # Auth endpoints are now properly routed through auth_router at /api/v1/auth/

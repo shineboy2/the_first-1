@@ -32,10 +32,12 @@ celery_app.autodiscover_tasks(["workers.tasks"], force=True)
 from workers.tasks.import_requests import import_requests_from_request_network
 from workers.tasks.export_results import export_completed_results
 from workers.tasks.settings_exporter import export_settings_to_request_network
-from workers.tasks.cache_maintenance import cleanup_old_cache, cleanup_redis_cache
+from workers.tasks.request_types_exporter import export_request_types_to_request_network
+
 from workers.tasks.system_monitoring import system_health_check
 from workers.tasks.execute_query import execute_pending_queries
 from workers.tasks.users_exporter import export_users_to_request_network
+from workers.tasks.cleanup import cleanup_old_files
 
 # Celery Beat schedule for the Response Network
 celery_app.conf.beat_schedule = {
@@ -59,11 +61,12 @@ celery_app.conf.beat_schedule = {
         "task": "workers.tasks.settings_exporter.export_settings_to_request_network",
         "schedule": 60.0,  # هر 60 ثانیه
     },
-    # Cache maintenance every 1 hour
-    "cache-maintenance-hourly": {
-        "task": "workers.tasks.cache_maintenance.cleanup_old_cache",
-        "schedule": 3600.0,  # هر 3600 ثانیه (1 ساعت)
+    # Export request types to request-network every 60 seconds
+    "export-request-types-every-minute": {
+        "task": "workers.tasks.request_types_exporter.export_request_types_to_request_network",
+        "schedule": 60.0,
     },
+
     # System monitoring every 5 minutes
     # "system-monitoring-every-5min": {
     #     "task": "workers.tasks.system_monitoring.system_health_check",
@@ -73,5 +76,10 @@ celery_app.conf.beat_schedule = {
     "execute-pending-queries": {
         "task": "workers.tasks.execute_query.execute_pending_queries",
         "schedule": 10.0,
+    },
+    # Cleanup old files daily at 02:00 AM
+    "cleanup-old-files-daily": {
+        "task": "cleanup.cleanup_old_files",
+        "schedule": 86400.0,  # هر 24 ساعت (روزانه)
     }
 }

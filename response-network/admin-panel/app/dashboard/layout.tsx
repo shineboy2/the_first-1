@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import {
   LayoutDashboard,
   Users,
   Zap,
-  HardDrive,
+
   Settings,
   LogOut,
   Menu,
@@ -20,6 +20,7 @@ import {
   Server,
   ListTodo,
   Download,
+  Globe,
 } from "lucide-react";
 import { useState } from "react";
 import { useTheme } from "next-themes";
@@ -61,10 +62,11 @@ const navigation = [
     icon: Download,
   },
   {
-    name: "کش و بهینه‌سازی",
-    href: "/dashboard/cache",
-    icon: HardDrive,
+    name: "API‌های خارجی",
+    href: "/dashboard/external-apis",
+    icon: Globe,
   },
+
   {
     name: "انواع پروفایل",
     href: "/dashboard/profile-types",
@@ -82,7 +84,6 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const router = useRouter();
   const pathname = usePathname();
   const { user, logout, isLoading } = useAuthStore();
   const { theme, setTheme } = useTheme();
@@ -95,15 +96,15 @@ export default function DashboardLayout({
 
   useEffect(() => {
     if (!isLoading && !user) {
-      router.push("/login");
+      // Hard redirect ensures server middleware runs.
+      // Call logout() to clear any stray cookies that would cause middleware redirect loops!
+      logout();
     }
-  }, [user, isLoading, router]);
+  }, [user, isLoading, logout]);
 
   const handleLogout = () => {
+    // auth store handles clearing cookie, localStorage, and redirect
     logout();
-    // Clear auth token cookie
-    document.cookie = "auth-token=; path=/; max-age=0; SameSite=Lax";
-    router.push("/login");
   };
 
   if (!mounted) return null;

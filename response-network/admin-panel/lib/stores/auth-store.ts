@@ -27,7 +27,19 @@ export const useAuthStore = create<AuthState>()(
       isLoading: false,
       setUser: (user) => set({ user }),
       setToken: (token) => set({ token }),
-      logout: () => set({ user: null, token: null }),
+      logout: () => {
+        set({ user: null, token: null });
+        // Clear auth-token cookie
+        if (typeof document !== 'undefined') {
+          document.cookie = 'auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+        }
+        // Clear persisted storage
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('auth-storage');
+          // Hard redirect to login page (full page reload triggers server middleware)
+          window.location.href = '/login';
+        }
+      },
       setLoading: (loading) => set({ isLoading: loading }),
     }),
     {

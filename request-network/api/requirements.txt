@@ -38,6 +38,7 @@ python-multipart==0.0.20
 PyYAML==6.0.3
 redis==5.2.1
 celery==5.5.3
+flower==2.0.1
 kombu==5.5.4
 billiard==4.2.2
 vine==5.1.0

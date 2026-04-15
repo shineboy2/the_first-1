@@ -16,9 +16,14 @@ class User(UserBase):
     rate_limit_per_minute: int
     rate_limit_per_hour: int
     rate_limit_per_day: int
+    daily_request_limit: int = 100
+    monthly_request_limit: int = 2000
     priority: int
     is_active: bool
     allowed_indices: Optional[list[str]] = None
+    allowed_request_types: Optional[list] = []
+    blocked_request_types: Optional[list] = []
+    allowed_external_apis: Optional[list] = []
     
     model_config = ConfigDict(from_attributes=True)
 

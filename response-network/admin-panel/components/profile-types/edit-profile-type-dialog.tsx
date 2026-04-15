@@ -27,8 +27,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { profileTypeService } from "@/lib/services/admin-api";
-import type { ProfileType } from "@/lib/services/admin-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Checkbox } from "@/components/ui/checkbox";
+import adminApi, { ExternalAPI, ProfileType } from "@/lib/services/admin-api";
 
 const formSchema = z.object({
     name: z
@@ -39,6 +40,9 @@ const formSchema = z.object({
     daily_request_limit: z.coerce.number().min(0, "محدودیت نمی‌تواند منفی باشد"),
     monthly_request_limit: z.coerce.number().min(0, "محدودیت نمی‌تواند منفی باشد"),
     is_active: z.boolean(),
+    permissions: z.object({
+        allowed_external_apis: z.array(z.string()).default([]),
+    }).default({ allowed_external_apis: [] }),
 });
 
 type EditProfileTypeFormData = z.infer<typeof formSchema>;
@@ -57,6 +61,15 @@ export function EditProfileTypeDialog({
     profileType,
 }: EditProfileTypeDialogProps) {
     const [error, setError] = useState<string | null>(null);
+    const [externalApis, setExternalApis] = useState<ExternalAPI[]>([]);
+
+    import("react").then((React) => {
+        React.useEffect(() => {
+            if (open) {
+                adminApi.externalApiService.getExternalAPIs().then(setExternalApis).catch(console.error);
+            }
+        }, [open]);
+    });
 
     const form = useForm<EditProfileTypeFormData>({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -67,6 +80,9 @@ export function EditProfileTypeDialog({
             daily_request_limit: profileType?.daily_request_limit || 0,
             monthly_request_limit: profileType?.monthly_request_limit || 0,
             is_active: profileType?.is_active ?? true,
+            permissions: {
+                allowed_external_apis: profileType?.permissions?.allowed_external_apis || [],
+            }
         },
     });
 
@@ -81,6 +97,9 @@ export function EditProfileTypeDialog({
                 daily_request_limit: profileType.daily_request_limit,
                 monthly_request_limit: profileType.monthly_request_limit,
                 is_active: profileType.is_active,
+                permissions: {
+                    allowed_external_apis: profileType.permissions?.allowed_external_apis || [],
+                }
             });
         } else if (!open) {
             // When the dialog closes, reset the form to its initial empty state
@@ -91,6 +110,7 @@ export function EditProfileTypeDialog({
                 daily_request_limit: 0,
                 monthly_request_limit: 0,
                 is_active: true,
+                permissions: { allowed_external_apis: [] }
             });
             setError(null); // Clear any previous errors
         }
@@ -221,6 +241,60 @@ export function EditProfileTypeDialog({
                                 </FormItem>
                             )}
                         />
+
+                        {externalApis.length > 0 && (
+                            <FormField
+                                control={form.control}
+                                name="permissions.allowed_external_apis"
+                                render={() => (
+                                    <FormItem>
+                                        <div className="mb-4">
+                                            <FormLabel className="text-base">دسترسی API های خارجی</FormLabel>
+                                            <FormDescription>
+                                                کدام API های خارجی برای این نوع پروفایل مجاز است؟
+                                            </FormDescription>
+                                        </div>
+                                        {externalApis.map((api) => (
+                                            <FormField
+                                                key={api.id}
+                                                control={form.control}
+                                                name="permissions.allowed_external_apis"
+                                                render={({ field }) => {
+                                                    return (
+                                                        <FormItem
+                                                            key={api.id}
+                                                            className="flex flex-row items-start space-x-3 space-x-reverse space-y-0 rounded-md border p-4"
+                                                        >
+                                                            <FormControl>
+                                                                <Checkbox
+                                                                    disabled={profileType?.name === "admin" && api.is_active} // Optional: logic to not allow removing from admin
+                                                                    checked={field.value?.includes(api.name)}
+                                                                    onCheckedChange={(checked) => {
+                                                                        return checked
+                                                                            ? field.onChange([...(field.value || []), api.name])
+                                                                            : field.onChange(
+                                                                                field.value?.filter(
+                                                                                    (value) => value !== api.name
+                                                                                )
+                                                                            )
+                                                                    }}
+                                                                />
+                                                            </FormControl>
+                                                            <div className="space-y-1 leading-none">
+                                                                <FormLabel className="font-mono text-sm">
+                                                                    {api.name}
+                                                                </FormLabel>
+                                                            </div>
+                                                        </FormItem>
+                                                    )
+                                                }}
+                                            />
+                                        ))}
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        )}
 
                         <DialogFooter>
                             <Button

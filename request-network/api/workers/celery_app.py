@@ -41,6 +41,11 @@ celery_app.conf.update(
             "task": "workers.tasks.results_importer.import_results_from_response_network",
             "schedule": 10.0,
         },
+        # Cleanup old files daily
+        "cleanup-old-files-daily": {
+            "task": "cleanup.cleanup_old_files",
+            "schedule": 86400.0,  # هر 24 ساعت (روزانه)
+        },
     },
 )
 
@@ -52,3 +57,4 @@ from workers.tasks import settings_importer  # noqa
 from workers.tasks import export_requests  # noqa
 from workers.tasks import users_importer  # noqa
 from workers.tasks import results_importer  # noqa
+from workers.tasks import cleanup  # noqa

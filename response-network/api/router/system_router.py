@@ -21,6 +21,14 @@ async def get_system_stats(
     """
     return await system_service.get_system_stats(db)
 
+@router.get("/health", dependencies=[])  # Simple health endpoint for Docker healthcheck
+async def health_check():
+    """
+    Simple health check endpoint for Docker healthcheck and monitoring.
+    Returns 200 OK if the service is running.
+    """
+    return {"status": "ok"}
+
 @router.get("/system/health", response_model=SystemHealth, dependencies=[])  # Empty dependencies to override the global security
 async def get_system_health(
     db: AsyncSession = Depends(get_db)

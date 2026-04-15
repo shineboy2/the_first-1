@@ -147,10 +147,12 @@ async def get_pending_tasks(
             try:
                 task_json = json.loads(task_data)
                 task_list.append({
-                    "task_id": task_json.get('headers', {}).get('id', 'unknown'),
+                    "id": task_json.get('headers', {}).get('id', 'unknown'),
                     "name": task_json.get('headers', {}).get('task', 'unknown'),
                     "state": "PENDING",
-                    "eta": task_json.get('headers', {}).get('eta')
+                    "eta": task_json.get('headers', {}).get('eta'),
+                    "args": task_json.get('args', []),
+                    "kwargs": task_json.get('kwargs', {})
                 })
             except:
                 pass

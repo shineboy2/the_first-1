@@ -1,0 +1,211 @@
+# =============================================================================
+# Request Network - Docker Compose (Production)
+# =============================================================================
+# این فایل برای راه‌اندازی شبکه درخواست روی یک سرور مستقل است
+# =============================================================================
+
+version: "3.8"
+
+services:
+  # =================== Database ===================
+  postgres:
+    image: postgres:15-alpine
+    container_name: request-db
+    environment:
+      - POSTGRES_USER=${DB_USER:-request_user}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME:-request_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - request-net
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${DB_USER:-request_user}", "-d", "${DB_NAME:-request_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  # =================== Redis ===================
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    networks:
+      - request-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  # =================== API Server ===================
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    container_name: request-api
+    environment:
+      - PYTHONUNBUFFERED=1
+      - REQUEST_DB_HOST=postgres
+      - REQUEST_DB_PORT=5432
+      - REQUEST_DB_USER=${DB_USER:-request_user}
+      - REQUEST_DB_PASSWORD=${DB_PASSWORD}
+      - REQUEST_DB_NAME=${DB_NAME:-request_db}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/1
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/1
+      - SECRET_KEY=${SECRET_KEY}
+      - FTP_HOST=${FTP_HOST}
+      - FTP_PORT=${FTP_PORT:-21}
+      - FTP_USER=${FTP_USER}
+      - FTP_PASSWORD=${FTP_PASSWORD}
+      - FTP_USE_TLS=${FTP_USE_TLS:-false}
+      - SHARED_DATA_DIR=/app/shared_data
+      - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS}
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "${API_PORT:-8001}:8000"
+    volumes:
+      - shared_data:/app/shared_data
+      - exports:/app/exports
+      - imports:/app/imports
+    networks:
+      - request-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: always
+
+  # =================== Celery Worker ===================
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: request-celery-worker
+    environment:
+      - PYTHONUNBUFFERED=1
+      - REQUEST_DB_HOST=postgres
+      - REQUEST_DB_PORT=5432
+      - REQUEST_DB_USER=${DB_USER:-request_user}
+      - REQUEST_DB_PASSWORD=${DB_PASSWORD}
+      - REQUEST_DB_NAME=${DB_NAME:-request_db}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/1
+      - SECRET_KEY=${SECRET_KEY}
+      - FTP_HOST=${FTP_HOST}
+      - FTP_PORT=${FTP_PORT:-21}
+      - FTP_USER=${FTP_USER}
+      - FTP_PASSWORD=${FTP_PASSWORD}
+      - FTP_USE_TLS=${FTP_USE_TLS:-false}
+      - SHARED_DATA_DIR=/app/shared_data
+    command: celery -A workers.celery_app worker -l info --concurrency=4
+    volumes:
+      - shared_data:/app/shared_data
+      - exports:/app/exports
+      - imports:/app/imports
+    networks:
+      - request-net
+    depends_on:
+      - redis
+      - postgres
+    healthcheck:
+      test: ["NONE"]
+    restart: always
+
+  # =================== Celery Beat (Scheduler) ===================
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: request-celery-beat
+    environment:
+      - PYTHONUNBUFFERED=1
+      - REQUEST_DB_HOST=postgres
+      - REQUEST_DB_PORT=5432
+      - REQUEST_DB_USER=${DB_USER:-request_user}
+      - REQUEST_DB_PASSWORD=${DB_PASSWORD}
+      - REQUEST_DB_NAME=${DB_NAME:-request_db}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/1
+      - SECRET_KEY=${SECRET_KEY}
+      - FTP_HOST=${FTP_HOST}
+      - FTP_PORT=${FTP_PORT:-21}
+      - FTP_USER=${FTP_USER}
+      - FTP_PASSWORD=${FTP_PASSWORD}
+      - FTP_USE_TLS=${FTP_USE_TLS:-false}
+      - SHARED_DATA_DIR=/app/shared_data
+    command: celery -A workers.celery_app beat -l info
+    volumes:
+      - shared_data:/app/shared_data
+      - exports:/app/exports
+      - imports:/app/imports
+    networks:
+      - request-net
+    depends_on:
+      - redis
+      - postgres
+    healthcheck:
+      test: ["NONE"]
+    restart: always
+
+  # =================== Flower (Celery Monitor) ===================
+  flower:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: request-flower
+    environment:
+      - PYTHONUNBUFFERED=1
+      - REQUEST_DB_HOST=postgres
+      - REQUEST_DB_PORT=5432
+      - REQUEST_DB_USER=${DB_USER:-request_user}
+      - REQUEST_DB_PASSWORD=${DB_PASSWORD}
+      - REQUEST_DB_NAME=${DB_NAME:-request_db}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/1
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/1
+      - FLOWER_PORT=5555
+      - FLOWER_BASIC_AUTH=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin123}
+    command: celery -A workers.celery_app flower --port=5555 --basic_auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin123}
+    ports:
+      - "${FLOWER_PORT:-5555}:5555"
+    networks:
+      - request-net
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-u", "${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin123}", "http://localhost:5555/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: always
+
+volumes:
+  postgres_data:
+  redis_data:
+  shared_data:
+  exports:
+  imports:
+
+networks:
+  request-net:
+    driver: bridge

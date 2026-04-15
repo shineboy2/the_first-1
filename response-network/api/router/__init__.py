@@ -7,6 +7,7 @@ from router.auth_router import router as auth_router
 from router.request_type_router import router as request_type_router
 from router.settings_router import router as settings_router
 from router import profile_type_router
+from router import storage_config_router
 
 __all__ = [
     "request_router",
@@ -18,4 +19,6 @@ __all__ = [
     "request_type_router",
     "settings_router",
     "profile_type_router",
+    "storage_config_router",
 ]
+

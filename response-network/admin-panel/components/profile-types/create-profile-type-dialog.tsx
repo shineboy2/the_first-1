@@ -28,6 +28,8 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { profileTypeService } from "@/lib/services/admin-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Checkbox } from "@/components/ui/checkbox";
+import adminApi, { ExternalAPI } from "@/lib/services/admin-api";
 
 const formSchema = z.object({
     name: z
@@ -38,6 +40,9 @@ const formSchema = z.object({
     daily_request_limit: z.coerce.number().min(0, "محدودیت نمی‌تواند منفی باشد"),
     monthly_request_limit: z.coerce.number().min(0, "محدودیت نمی‌تواند منفی باشد"),
     is_active: z.boolean().default(true),
+    permissions: z.object({
+        allowed_external_apis: z.array(z.string()).default([]),
+    }).default({ allowed_external_apis: [] }),
 });
 
 type CreateProfileTypeFormData = z.infer<typeof formSchema>;
@@ -54,6 +59,15 @@ export function CreateProfileTypeDialog({
     onSuccess,
 }: CreateProfileTypeDialogProps) {
     const [error, setError] = useState<string | null>(null);
+    const [externalApis, setExternalApis] = useState<ExternalAPI[]>([]);
+
+    import("react").then((React) => {
+        React.useEffect(() => {
+            if (open) {
+                adminApi.externalApiService.getExternalAPIs().then(setExternalApis).catch(console.error);
+            }
+        }, [open]);
+    });
 
     const form = useForm<CreateProfileTypeFormData>({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -70,7 +84,8 @@ export function CreateProfileTypeDialog({
     const onSubmit = async (data: CreateProfileTypeFormData) => {
         try {
             setError(null);
-            await profileTypeService.createProfileType(data);
+            const payload = { ...data, max_results_per_request: 1000, display_name: data.name };
+            await profileTypeService.createProfileType(payload);
             form.reset();
             onSuccess();
             onOpenChange(false);
@@ -182,6 +197,59 @@ export function CreateProfileTypeDialog({
                                 </FormItem>
                             )}
                         />
+
+                        {externalApis.length > 0 && (
+                            <FormField
+                                control={form.control}
+                                name="permissions.allowed_external_apis"
+                                render={() => (
+                                    <FormItem>
+                                        <div className="mb-4">
+                                            <FormLabel className="text-base">دسترسی API های خارجی</FormLabel>
+                                            <FormDescription>
+                                                کدام API های خارجی برای این نوع پروفایل مجاز است؟
+                                            </FormDescription>
+                                        </div>
+                                        {externalApis.map((api) => (
+                                            <FormField
+                                                key={api.id}
+                                                control={form.control}
+                                                name="permissions.allowed_external_apis"
+                                                render={({ field }) => {
+                                                    return (
+                                                        <FormItem
+                                                            key={api.id}
+                                                            className="flex flex-row items-start space-x-3 space-x-reverse space-y-0 rounded-md border p-4"
+                                                        >
+                                                            <FormControl>
+                                                                <Checkbox
+                                                                    checked={field.value?.includes(api.name)}
+                                                                    onCheckedChange={(checked) => {
+                                                                        return checked
+                                                                            ? field.onChange([...(field.value || []), api.name])
+                                                                            : field.onChange(
+                                                                                field.value?.filter(
+                                                                                    (value) => value !== api.name
+                                                                                )
+                                                                            )
+                                                                    }}
+                                                                />
+                                                            </FormControl>
+                                                            <div className="space-y-1 leading-none">
+                                                                <FormLabel className="font-mono text-sm">
+                                                                    {api.name}
+                                                                </FormLabel>
+                                                            </div>
+                                                        </FormItem>
+                                                    )
+                                                }}
+                                            />
+                                        ))}
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        )}
 
                         <DialogFooter>
                             <Button

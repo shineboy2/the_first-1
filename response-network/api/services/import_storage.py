@@ -12,10 +12,21 @@ logger = logging.getLogger(__name__)
 
 class ImportStorageService:
     @staticmethod
-    def get_import_config(db: Session) -> dict:
+    def get_import_config(db: Session, resource_type: str = None) -> dict:
         """Fetch import configuration from database settings."""
-        result = db.execute(select(Settings).where(Settings.key == "import_config"))
+        # Map resource type to specific config keys
+        key = "import_config"
+        if resource_type == "requests":
+            key = "request_import_config"
+        
+        result = db.execute(select(Settings).where(Settings.key == key))
         setting = result.scalar_one_or_none()
+        
+        # Fallback to generic config if specific not found
+        if not setting and key != "import_config":
+             result = db.execute(select(Settings).where(Settings.key == "import_config"))
+             setting = result.scalar_one_or_none()
+
         if not setting or not setting.value:
             return None
         return setting.value
@@ -26,15 +37,16 @@ class ImportStorageService:
         Read the latest import file for a resource type (e.g., 'requests').
         Abstraacts away Local vs FTP logic.
         """
-        config = ImportStorageService.get_import_config(db)
+        config = ImportStorageService.get_import_config(db, resource_type)
         if not config:
             logger.info(f"Skipping import for {resource_type}: Import configuration missing. Waiting for admin to configure via API.")
             return None
 
-        import_type = config.get("type", "local")
+        # Mapping field names from admin_exports.py schema
+        import_type = config.get("storage_type", config.get("type", "local"))
         
         if import_type == "local":
-            base_path = Path(config.get("path", "/app/imports"))
+            base_path = Path(config.get("local_path", config.get("path", "/app/imports")))
             file_path = base_path / resource_type / "latest.json"
             
             if not file_path.exists():
@@ -49,10 +61,10 @@ class ImportStorageService:
                 return None
         
         elif import_type == "ftp":
-            host = config.get("host")
-            user = config.get("user")
-            passwd = config.get("password")
-            remote_path = config.get("path", f"/{resource_type}")
+            host = config.get("ftp_host", config.get("host"))
+            user = config.get("ftp_user", config.get("user"))
+            passwd = config.get("ftp_password", config.get("password"))
+            remote_path = config.get("ftp_path", config.get("path", f"/{resource_type}"))
             
             if not host:
                 logger.error(f"FTP host missing in import_config for {resource_type}")

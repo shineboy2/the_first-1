@@ -8,7 +8,10 @@ from sqlalchemy.future import select
 from db.session import get_db_session
 from auth.dependencies import require_admin, get_current_user
 from models.user import User
+from models.api_key import ApiKey
 from schemas.user import User as UserSchema
+from schemas.api_key import APIKeyCreate, APIKeyRead, APIKeyGenerated
+import secrets
 
 router = APIRouter(
     prefix="/admin",
@@ -35,7 +38,7 @@ async def list_users(
     if profile_type:
         query = query.where(User.profile_type == profile_type)
 
-    query = query.offset(skip).limit(limit).order_by(User.created_at.desc())
+    query = query.offset(skip).limit(limit).order_by(User.synced_at.desc())
 
     result = await db.execute(query)
     users = result.scalars().all()
@@ -103,3 +106,66 @@ async def deactivate_user(
 # ============ NO PASSWORD MANAGEMENT HERE ============
 # Password changes are automatically synced from Response Network
 # via the settings_importer task - see workers/tasks/settings_importer.py
+
+@router.get("/users/{user_id}/api-keys", response_model=List[APIKeyRead])
+async def get_user_api_keys_admin(
+    user_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Get all API keys for a specific user. Admins only."""
+    stmt = select(ApiKey).where(ApiKey.user_id == user_id)
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+
+@router.post("/users/{user_id}/api-keys", response_model=APIKeyGenerated, status_code=status.HTTP_201_CREATED)
+async def create_user_api_key_admin(
+    user_id: uuid.UUID,
+    api_key_in: APIKeyCreate,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Create a new API key for a specific user. Admins only."""
+    from routers.api_key_router import API_KEY_PREFIX, hash_api_key
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        
+    plain_key = f"{API_KEY_PREFIX}{secrets.token_urlsafe(32)}"
+    hashed_key = hash_api_key(plain_key)
+
+    db_api_key = ApiKey(
+        user_id=user_id,
+        name=api_key_in.name,
+        key_hash=hashed_key,
+        prefix=API_KEY_PREFIX,
+        scopes=api_key_in.scopes,
+    )
+    db.add(db_api_key)
+    await db.commit()
+    await db.refresh(db_api_key)
+
+    return APIKeyGenerated(
+        id=db_api_key.id,
+        name=db_api_key.name,
+        created_at=db_api_key.created_at,
+        api_key=plain_key,
+    )
+
+
+@router.delete("/users/{user_id}/api-keys/{api_key_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_user_api_key_admin(
+    user_id: uuid.UUID,
+    api_key_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Revoke an API key for a specific user. Admins only."""
+    stmt = select(ApiKey).where(ApiKey.id == api_key_id, ApiKey.user_id == user_id)
+    result = await db.execute(stmt)
+    db_api_key = result.scalars().first()
+
+    if not db_api_key:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API Key not found")
+
+    db_api_key.is_active = False
+    await db.commit()
+    return None

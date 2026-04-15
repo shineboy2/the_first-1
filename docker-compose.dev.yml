@@ -336,10 +336,14 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=http://192.168.214.139:8000
       - NODE_ENV=development
+    command: npm run dev
     ports:
       - "3000:3000"
     networks:
       - app-net
+    volumes:
+      - ./response-network/admin-panel:/app
+      - /app/node_modules
     depends_on:
       - api-response
     restart: unless-stopped

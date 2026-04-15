@@ -34,6 +34,7 @@ export interface ProfileType {
   max_results_per_request: number;
   is_active: boolean;
   is_builtin: boolean;
+  permissions?: Record<string, any>;
 }
 
 export interface ExportStatus {
@@ -68,6 +69,9 @@ export interface SystemStats {
   results: {
     total: number;
   };
+  requests_by_type?: { type: string; count: number }[];
+  user_request_stats?: { username: string; total: number; completed: number }[];
+  request_types_stats?: { active: number; inactive: number };
 }
 
 export interface CacheStats {
@@ -132,6 +136,21 @@ export interface ProfileTypeAccess {
   updated_at: string;
 }
 
+export interface ExternalAPI {
+  id: string;
+  name: string;
+  description: string | null;
+  endpoint_url: string;
+  http_method: string;
+  is_active: boolean;
+  auth_type: string;
+  auth_config: Record<string, any> | null;
+  static_headers: Record<string, any> | null;
+  payload_template: Record<string, any> | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // ============================================================================
 // Health Service
 // ============================================================================
@@ -170,13 +189,24 @@ export const statsService = {
 
 export const userService = {
   async getUsers(): Promise<User[]> {
-    const response = await api.get("/api/v1/users");
-    const users = Array.isArray(response.data) ? response.data : response.data.users || [];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return users.map((u: any) => ({
-      ...u,
-      role: u.role || (u.profile_type === 'admin' ? 'admin' : 'user')
-    }));
+    try {
+      const response = await api.get("/api/v1/users");
+      const users = Array.isArray(response.data) ? response.data : (response.data?.users || []);
+
+      if (!Array.isArray(users)) {
+        console.warn("getUsers: Expected array but got", users);
+        return [];
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return users.map((u: any) => ({
+        ...u,
+        role: u.role || (u.profile_type === 'admin' ? 'admin' : 'user')
+      }));
+    } catch (error) {
+      console.error("Failed to fetch users:", error);
+      return [];
+    }
   },
 
   async getUserById(id: string): Promise<User> {
@@ -293,10 +323,7 @@ export const requestService = {
     return response.data.requests || [];
   },
 
-  async retryRequest(id: string): Promise<any> {
-    const response = await api.post(`/api/v1/requests/${id}/retry`);
-    return response.data;
-  },
+
 
   async retryAllFailed(): Promise<any> {
     const response = await api.post("/api/v1/requests/retry-all");
@@ -421,30 +448,6 @@ export const requestService = {
 };
 
 // ============================================================================
-// Cache Service
-// ============================================================================
-
-export const cacheService = {
-  async clearCache(): Promise<void> {
-    await api.post("/api/v1/monitoring/cache/clear");
-  },
-
-  async clearCacheByKey(key: string): Promise<void> {
-    await api.post(`/api/v1/monitoring/cache/clear/${key}`);
-  },
-
-  async getCacheKeys(): Promise<string[]> {
-    const response = await api.get("/api/v1/monitoring/cache/keys");
-    return response.data.keys || [];
-  },
-
-  async optimizeCache(): Promise<void> {
-    // Placeholder for cache optimization - can be implemented later
-    await api.post("/api/v1/monitoring/cache/optimize");
-  },
-};
-
-// ============================================================================
 // Settings Service
 // ============================================================================
 
@@ -497,8 +500,13 @@ export interface WorkerSettings {
 
 export const workerService = {
   async getWorkerSettings(): Promise<WorkerSettings[]> {
-    const response = await api.get("/api/v1/worker-settings/");
-    return response.data;
+    try {
+      const response = await api.get("/api/v1/worker-settings/");
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      console.error("Failed to fetch worker settings:", error);
+      return [];
+    }
   },
 
   async getWorkerSetting(id: string): Promise<WorkerSettings> {
@@ -540,10 +548,13 @@ export interface QueueStats {
   notes: string;
 }
 
-export interface WorkersStats {
-  active_workers: string[];
-  count: number;
-  status?: string;
+export interface WorkerStats {
+  worker_name: string;
+  pool_type: string;
+  max_concurrency: number;
+  active_tasks: number;
+  processed_tasks: number;
+  offline: boolean;
 }
 
 export interface PendingTask {
@@ -560,14 +571,38 @@ export const adminTasksService = {
     return response.data;
   },
 
-  async getWorkersStats(): Promise<WorkersStats> {
-    const response = await api.get("/api/v1/admin/tasks/workers/stats");
-    return response.data;
+  async getWorkersStats(): Promise<WorkerStats[]> {
+    try {
+      const response = await api.get("/api/v1/admin/tasks/workers/stats");
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      console.error("Failed to fetch workers stats:", error);
+      return [];
+    }
   },
 
   async getPendingTasks(): Promise<PendingTask[]> {
-    const response = await api.get("/api/v1/admin/tasks/queue/pending");
-    return response.data;
+    try {
+      const response = await api.get("/api/v1/admin/tasks/queue/pending");
+      const tasks = response.data?.tasks;
+
+      if (!Array.isArray(tasks)) {
+        console.warn("getPendingTasks: Expected array but got", tasks);
+        return [];
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return tasks.map((task: any) => ({
+        id: task.id || task.task_id || `unknown-${Math.random().toString(36).substr(2, 9)}`,
+        name: task.name || 'Unknown Task',
+        args: task.args || [],
+        kwargs: task.kwargs || {},
+        created_at: task.created_at || task.eta || new Date().toISOString() // fallback for created_at
+      }));
+    } catch (error) {
+      console.error("Failed to fetch pending tasks:", error);
+      return [];
+    }
   },
 
   async skipTask(taskId: string): Promise<void> {
@@ -584,37 +619,90 @@ export const adminTasksService = {
 };
 
 // ============================================================================
-// Export Config Service
+// Storage Config Service (Multiple Operation Types)
 // ============================================================================
 
-export interface ExportConfig {
+export type OperationType = 'user_export' | 'settings_export' | 'result_export' | 'request_import';
+
+export interface StorageConfig {
+  operation_type: OperationType;
   enabled: boolean;
   format: string;
-  destination: string;
-  schedule?: string;
-
-  // Destination configuration
   destination_type: 'local' | 'ftp';
   local_path?: string;
   ftp_host?: string;
   ftp_port?: number;
-  ftp_username?: string;
+  ftp_user?: string;
   ftp_password?: string;
   ftp_path?: string;
   ftp_use_tls?: boolean;
+  schedule?: string;
+  configured?: boolean;
 }
 
-export const exportConfigService = {
-  async getExportConfig(): Promise<ExportConfig> {
+export const OPERATION_LABELS: Record<OperationType, { title: string; description: string }> = {
+  user_export: {
+    title: "خروجی کاربران",
+    description: "ارسال کاربران به Request Network"
+  },
+  settings_export: {
+    title: "خروجی تنظیمات",
+    description: "ارسال تنظیمات به Request Network"
+  },
+  result_export: {
+    title: "خروجی نتایج",
+    description: "ارسال نتایج کوئری‌ها به Request Network"
+  },
+  request_import: {
+    title: "ورودی درخواست‌ها",
+    description: "دریافت درخواست‌ها از Request Network"
+  }
+};
+
+export const storageConfigService = {
+  // Get all storage configurations
+  async getAllConfigs(): Promise<StorageConfig[]> {
+    const response = await api.get("/api/v1/admin/exports/configs");
+    return response.data;
+  },
+
+  // Get config for specific operation type
+  async getConfig(operationType: OperationType): Promise<StorageConfig> {
+    const response = await api.get(`/api/v1/admin/exports/config/${operationType}`);
+    return response.data;
+  },
+
+  // Update config for specific operation type
+  async updateConfig(operationType: OperationType, data: Partial<StorageConfig>): Promise<StorageConfig> {
+    const response = await api.post(`/api/v1/admin/exports/config/${operationType}`, data);
+    return response.data;
+  },
+
+  // Test specific operation (triggers actual export/import)
+  async testOperation(operationType: OperationType): Promise<{ success: boolean; message: string; task_id?: string }> {
+    const response = await api.post(`/api/v1/admin/exports/test/${operationType}`);
+    return response.data;
+  },
+
+  // Test connection (FTP/Local) without triggering export
+  async testConnection(operationType: OperationType): Promise<{ success: boolean; message: string; files_count?: number }> {
+    const response = await api.post(`/api/v1/admin/exports/test-connection/${operationType}`);
+    return response.data;
+  },
+
+  // Legacy: Get default export config (user_export)
+  async getExportConfig(): Promise<StorageConfig> {
     const response = await api.get("/api/v1/admin/exports/config");
     return response.data;
   },
 
-  async updateExportConfig(data: Partial<ExportConfig>): Promise<ExportConfig> {
+  // Legacy: Update default export config (user_export)
+  async updateExportConfig(data: Partial<StorageConfig>): Promise<StorageConfig> {
     const response = await api.post("/api/v1/admin/exports/config", data);
     return response.data;
   },
 
+  // Legacy: Test exports (user_export)
   async testExports(): Promise<{ success: boolean; message: string }> {
     const response = await api.post("/api/v1/admin/exports/test");
     return response.data;
@@ -626,18 +714,53 @@ export const exportConfigService = {
   },
 };
 
+// Legacy alias for backward compatibility
+export const exportConfigService = storageConfigService;
+
+// ============================================================================
+// External API Service
+// ============================================================================
+
+export const externalApiService = {
+  async getExternalAPIs(): Promise<ExternalAPI[]> {
+    const response = await api.get("/api/v1/external-apis/");
+    return response.data;
+  },
+
+  async getExternalAPI(id: string): Promise<ExternalAPI> {
+    const response = await api.get(`/api/v1/external-apis/${id}`);
+    return response.data;
+  },
+
+  async createExternalAPI(data: Partial<ExternalAPI>): Promise<ExternalAPI> {
+    const response = await api.post("/api/v1/external-apis/", data);
+    return response.data;
+  },
+
+  async updateExternalAPI(id: string, data: Partial<ExternalAPI>): Promise<ExternalAPI> {
+    const response = await api.patch(`/api/v1/external-apis/${id}`, data);
+    return response.data;
+  },
+
+  async deleteExternalAPI(id: string): Promise<void> {
+    await api.delete(`/api/v1/external-apis/${id}`);
+  },
+};
+
 const adminApi = {
   healthService,
   statsService,
   userService,
   requestService,
-  cacheService,
+
   settingsService,
   monitoringService,
   profileTypeService,
   workerService,
   adminTasksService,
   exportConfigService,
+  storageConfigService,
+  externalApiService,
 };
 
 export default adminApi;

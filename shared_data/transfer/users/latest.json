@@ -1,25 +1,6 @@
 {
   "users": [
     {
-      "id": "877bca0b-8468-473d-b1d4-a473ce42a8ab",
-      "username": "admin",
-      "email": "admin@example.com",
-      "hashed_password": "$2b$12$t95T23yitjS3I69mg3v7z./kYNY3iXMac.8CKOCKEWgZBma5Fzfdm",
-      "full_name": "System Administrator",
-      "profile_type": "admin",
-      "is_active": true,
-      "allowed_request_types": [],
-      "blocked_request_types": [],
-      "rate_limit_per_minute": 200,
-      "rate_limit_per_hour": 1000,
-      "rate_limit_per_day": 5000,
-      "daily_request_limit": 10000,
-      "monthly_request_limit": 100000,
-      "priority": 5,
-      "created_at": "2025-12-22T09:11:31.303620+00:00",
-      "updated_at": "2025-12-22T09:11:31.303620+00:00"
-    },
-    {
       "id": "ab256c2b-6780-4d2a-b3c6-35a04ca098ff",
       "username": "asqar",
       "email": "asqar@example.com",
@@ -94,8 +75,65 @@
       "priority": 5,
       "created_at": "2025-12-24T04:13:05.059560+00:00",
       "updated_at": "2025-12-24T04:13:05.059560+00:00"
+    },
+    {
+      "id": "65d047a1-402e-410f-a7a8-939a77faaef8",
+      "username": "user_basic",
+      "email": "basic@example.com",
+      "hashed_password": "$2b$12$vljZkMAh8Oh.cxo7/KRZq.G2PhBhgNtHBKyVu1rCqyLVCk7Yr2rn.",
+      "full_name": "User Basic",
+      "profile_type": "basic",
+      "is_active": true,
+      "allowed_request_types": [],
+      "blocked_request_types": [],
+      "rate_limit_per_minute": 200,
+      "rate_limit_per_hour": 1000,
+      "rate_limit_per_day": 5000,
+      "daily_request_limit": 100,
+      "monthly_request_limit": 2000,
+      "priority": 5,
+      "created_at": "2025-12-30T06:12:45.359099+00:00",
+      "updated_at": "2025-12-30T06:12:45.359099+00:00"
+    },
+    {
+      "id": "61e078dc-c51e-41b0-974d-150b503c3649",
+      "username": "user_premium",
+      "email": "premium@example.com",
+      "hashed_password": "$2b$12$PY5JL9/dQm/9Kx4XTDsLoO3g/QdNXuWk9sGr3jxHHvBcK6Hx2Z.qi",
+      "full_name": "User Premium",
+      "profile_type": "premium",
+      "is_active": true,
+      "allowed_request_types": [],
+      "blocked_request_types": [],
+      "rate_limit_per_minute": 200,
+      "rate_limit_per_hour": 1000,
+      "rate_limit_per_day": 5000,
+      "daily_request_limit": 1000,
+      "monthly_request_limit": 20000,
+      "priority": 5,
+      "created_at": "2025-12-30T06:12:45.359099+00:00",
+      "updated_at": "2025-12-30T06:12:45.359099+00:00"
+    },
+    {
+      "id": "877bca0b-8468-473d-b1d4-a473ce42a8ab",
+      "username": "admin",
+      "email": "admin@example.com",
+      "hashed_password": "$2b$12$irVwUVz9mwQ.eUGITb6Ol.ZyXy0rcDenM9gAsdU8yl7WVH1efp7qC",
+      "full_name": "System Administrator",
+      "profile_type": "admin",
+      "is_active": true,
+      "allowed_request_types": [],
+      "blocked_request_types": [],
+      "rate_limit_per_minute": 200,
+      "rate_limit_per_hour": 1000,
+      "rate_limit_per_day": 5000,
+      "daily_request_limit": 10000,
+      "monthly_request_limit": 100000,
+      "priority": 5,
+      "created_at": "2025-12-22T09:11:31.303620+00:00",
+      "updated_at": "2025-12-30T06:27:45.055659+00:00"
     }
   ],
-  "exported_at": "2025-12-29T09:09:05.616134",
-  "total_count": 5
+  "exported_at": "2025-12-30T09:50:47.582706",
+  "total_count": 7
 }

@@ -29,6 +29,7 @@ class User(BaseModel):
     # Request Type Access Control
     allowed_request_types: Mapped[list] = mapped_column(JSONB, nullable=False, server_default='[]')
     blocked_request_types: Mapped[list] = mapped_column(JSONB, nullable=False, server_default='[]')
+    allowed_external_apis: Mapped[list] = mapped_column(JSONB, nullable=False, server_default='[]')
     
     # Rate Limits
     rate_limit_per_minute: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
@@ -62,6 +63,12 @@ class User(BaseModel):
             return False
         
         return request_type in self.allowed_request_types
+
+    def is_external_api_allowed(self, api_name: str) -> bool:
+        """
+        Check if user is allowed to submit this external API type.
+        """
+        return api_name in self.allowed_external_apis
 
     def verify_password(self, password: str) -> bool:
         """

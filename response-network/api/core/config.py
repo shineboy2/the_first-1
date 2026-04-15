@@ -37,8 +37,8 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = "redis://redis-response:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://redis-response:6379/1"
 
-    # Elasticsearch URL for monitoring
-    ELASTICSEARCH_URL: AnyHttpUrl = "http://elasticsearch:9200"
+    # Elasticsearch URL for monitoring and query execution
+    ELASTICSEARCH_URL: AnyHttpUrl = "http://192.168.214.139:9200"
     
     # Import/export directories for file exchange with request network
     IMPORT_DIR: str = "/app/imports"

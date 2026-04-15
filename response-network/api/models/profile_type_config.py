@@ -30,6 +30,7 @@ class ProfileTypeConfig(Base, TimestampMixin):
         default=lambda: {
             "allowed_request_types": [],
             "blocked_request_types": [],
+            "allowed_external_apis": [],
             "max_results_per_request": 1000
         }
     )
@@ -67,6 +68,18 @@ class ProfileTypeConfig(Base, TimestampMixin):
         
         # اگر allowed list پُر باشد، فقط آن‌ها مجاز هستند
         return request_type in allowed and request_type not in blocked
+
+    def get_allowed_external_apis(self) -> list:
+        """Get list of allowed external APIs for this profile"""
+        return self.permissions.get("allowed_external_apis", [])
+    
+    def is_external_api_allowed(self, api_name: str) -> bool:
+        """Check if a specific external API is allowed for this profile"""
+        allowed = self.get_allowed_external_apis()
+        # For simplicity, if allowed list is empty, we default to False for external APIs
+        # unless we want the same logic as request types (Default allow all if empty).
+        # We will use the explicit allow list approach for external APIs for security.
+        return api_name in allowed
 
     # Relationships
     request_access: Mapped[List["ProfileTypeRequestAccess"]] = relationship("ProfileTypeRequestAccess", back_populates="profile_type")

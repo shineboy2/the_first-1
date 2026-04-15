@@ -66,7 +66,6 @@ def import_settings_from_response_network():
                     # Update existing setting
                     existing.value = setting.value
                     existing.description = setting.description
-                    existing.is_active = True
                     existing.updated_at = datetime.utcnow()
                 else:
                     # Create new setting
@@ -74,7 +73,6 @@ def import_settings_from_response_network():
                         key=setting.key,
                         value=setting.value,
                         description=setting.description,
-                        is_active=True,
                     )
                     db.add(new_setting)
             

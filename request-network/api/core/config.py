@@ -23,21 +23,36 @@ class Settings(BaseSettings):
     DB_ECHO_LOG: bool = False
 
     # Redis URL (for Celery stats)
-    REDIS_URL: RedisDsn = "redis://redis-request:6379/0"
+    REDIS_URL: RedisDsn = "redis://request-redis:6379/0"
 
     # Elasticsearch URL for monitoring
     # ELASTICSEARCH_URL: AnyHttpUrl = "http://elasticsearch:9200" # Not used in Request Network
     
     # Celery Configuration
-    CELERY_BROKER_URL: str = "redis://redis-request:6379/0"
-    CELERY_RESULT_BACKEND: str = "redis://redis-request:6379/1"
+    CELERY_BROKER_URL: str = "redis://request-redis:6379/0"
+    CELERY_RESULT_BACKEND: str = "redis://request-redis:6379/1"
     
     # Import/Export directories
     IMPORT_DIR: str = "/app/imports"
     EXPORT_DIR: str = "/app/exports"
     
     # CORS
-    BACKEND_CORS_ORIGINS: list[str] = ["http://localhost:3001", "http://localhost:3000"]
+    BACKEND_CORS_ORIGINS: str = "http://localhost:3001,http://localhost:3000,http://192.168.214.146:3002"
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        if isinstance(self.BACKEND_CORS_ORIGINS, list):
+            return self.BACKEND_CORS_ORIGINS
+        if isinstance(self.BACKEND_CORS_ORIGINS, str):
+            # Parse comma-separated or JSON list
+            if self.BACKEND_CORS_ORIGINS.startswith("["):
+                import json
+                try:
+                    return json.loads(self.BACKEND_CORS_ORIGINS)
+                except:
+                    pass
+            return [origin.strip() for origin in self.BACKEND_CORS_ORIGINS.split(",") if origin.strip()]
+        return []
 
     model_config = SettingsConfigDict(
         env_file=[".env", "/app/.env"],

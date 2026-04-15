@@ -11,6 +11,7 @@ from core.config import settings
 from models.incoming_request import IncomingRequest
 from models.request_type import RequestType
 from models.query_result import QueryResult
+from services.external_api_handler import ExternalAPIHandler
 
 # Setup sync database connection for Celery
 sync_engine = create_engine(
@@ -43,6 +44,44 @@ def execute_pending_queries(self):
                 req.assigned_worker = self.request.id
                 db.commit()
 
+                # Check if it is an external API call
+                if req.query_type == "external_api":
+                    external_api_name = (req.query_params or {}).get("api_type")
+                    if not external_api_name:
+                         raise ValueError("api_type not provided in query_params for external_api request")
+                         
+                    handler = ExternalAPIHandler(db)
+                    
+                    start_time = datetime.utcnow()
+                    api_response = handler.execute_api_call(external_api_name, req.query_params or {})
+                    end_time = datetime.utcnow()
+                    
+                    execution_time = int((end_time - start_time).total_seconds() * 1000)
+                    
+                    # Create QueryResult
+                    query_result = QueryResult(
+                        id=uuid.uuid4(),
+                        request_id=req.id,
+                        original_request_id=req.original_request_id,
+                        result_data={"api_response": api_response},
+                        result_count=1,
+                        execution_time_ms=execution_time,
+                        elasticsearch_took_ms=0,
+                        cache_hit=False,
+                        executed_at=end_time
+                    )
+                    db.add(query_result)
+
+                    # Update Request Status
+                    req.status = "completed"
+                    req.completed_at = end_time
+                    req.progress = 100.0
+                    
+                    db.commit()
+                    processed_count += 1
+                    continue
+                
+                # Default behavior: ElasticSearch Query
                 # Fetch Request Type
                 stmt = db.query(RequestType).filter(RequestType.name == req.query_type)
                 request_type = stmt.first()
@@ -52,6 +91,34 @@ def execute_pending_queries(self):
 
                 if not request_type.elasticsearch_query_template:
                      raise ValueError(f"No query template defined for '{req.query_type}'")
+                
+                # Validate required parameters
+                from models.request_type_parameter import RequestTypeParameter
+                stmt_params = db.query(RequestTypeParameter).filter(
+                    RequestTypeParameter.request_type_id == request_type.id
+                )
+                required_params = stmt_params.all()
+                
+                query_params = req.query_params or {}
+                missing_params = []
+                
+                for param in required_params:
+                    if param.is_required:
+                        # Case-insensitive lookup
+                        param_value = None
+                        for key, val in query_params.items():
+                            if key.lower() == param.placeholder_key.lower():
+                                param_value = val
+                                break
+                        
+                        if param_value is None or param_value == "":
+                            missing_params.append(param.placeholder_key)
+                
+                if missing_params:
+                    raise ValueError(
+                        f"Missing required parameters: {', '.join(missing_params)}. "
+                        f"Please provide values for these parameters in your request."
+                    )
 
                 # Parse and Render Query
                 # Simple recursive replacement
@@ -100,8 +167,7 @@ def execute_pending_queries(self):
                 hits = es_result.get("hits", {}).get("hits", [])
                 result_data = {
                     "count": es_result.get("hits", {}).get("total", {}).get("value", 0),
-                    "results": [h["_source"] for h in hits], # Generic key for all request types
-                    "provider": "Elasticsearch"
+                    "results": [h["_source"] for h in hits],
                 }
 
                 # Create QueryResult
@@ -128,10 +194,27 @@ def execute_pending_queries(self):
                 
             except Exception as e:
                 db.rollback()
+                
+                # Create QueryResult with error so it gets exported to Request Network
+                error_result = QueryResult(
+                    id=uuid.uuid4(),
+                    request_id=req.id,
+                    original_request_id=req.original_request_id,
+                    result_data={"error": str(e)},
+                    result_count=0,
+                    execution_time_ms=0,
+                    elasticsearch_took_ms=0,
+                    cache_hit=False,
+                    executed_at=datetime.utcnow()
+                )
+                db.add(error_result)
+                
                 req.status = "failed"
                 req.error_message = str(e)
                 req.retry_count += 1
+                req.completed_at = datetime.utcnow()
                 db.commit()
+                processed_count += 1
                 # Continue to next request
 
         return {

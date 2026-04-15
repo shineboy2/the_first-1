@@ -12,6 +12,7 @@ from .profile_type_config import ProfileTypeConfig
 from .profile_type_request_access import ProfileTypeRequestAccess
 from .system_log import SystemLog
 from .system_metrics import SystemMetrics
+from .external_api import ExternalAPI
 
 __all__ = [
     "User",
@@ -27,5 +28,6 @@ __all__ = [
     "ProfileTypeConfig",
     "ProfileTypeRequestAccess",
     "SystemLog",
-    "SystemMetrics"
+    "SystemMetrics",
+    "ExternalAPI",
 ]

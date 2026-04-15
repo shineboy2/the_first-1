@@ -8,7 +8,7 @@ from typing import Annotated
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, case
 from sqlalchemy.ext.asyncio import AsyncSession
 import redis
 import redis.asyncio
@@ -186,6 +186,33 @@ async def get_system_stats(
         """))
         db_size = result.scalar()
         
+        # New detailed stats for Dashboard Charts
+        from models.external_api import ExternalAPI
+        
+        # Requests by Type
+        requests_by_type_stmt = select(
+            IncomingRequest.query_type.label("type"),
+            func.count(IncomingRequest.id).label("count")
+        ).group_by(IncomingRequest.query_type)
+        requests_by_type_result = await db.execute(requests_by_type_stmt)
+        requests_by_type = [{"type": row.type, "count": row.count} for row in requests_by_type_result.all()]
+        
+        # User Request Stats
+        user_request_stats_stmt = select(
+            User.username.label("username"),
+            func.count(IncomingRequest.id).label("total"),
+            func.sum(case((IncomingRequest.status == 'completed', 1), else_=0)).label("completed")
+        ).outerjoin(IncomingRequest, User.id == IncomingRequest.user_id).group_by(User.id)
+        user_request_stats_result = await db.execute(user_request_stats_stmt)
+        user_request_stats = [
+            {"username": row.username, "total": row.total, "completed": row.completed or 0} 
+            for row in user_request_stats_result.all() if row.total > 0
+        ]
+        
+        # Request Types Stats
+        active_types = await db.scalar(select(func.count(ExternalAPI.id)).where(ExternalAPI.is_active == True))
+        inactive_types = await db.scalar(select(func.count(ExternalAPI.id)).where(ExternalAPI.is_active == False))
+
         return {
             "timestamp": datetime.utcnow().isoformat(),
             "users": {
@@ -204,6 +231,12 @@ async def get_system_stats(
             "database": {
                 "size": db_size,
             },
+            "requests_by_type": requests_by_type,
+            "user_request_stats": user_request_stats,
+            "request_types_stats": {
+                "active": active_types or 0,
+                "inactive": inactive_types or 0
+            }
         }
     except Exception as e:
         logger.error(f"Error getting system stats: {e}")
@@ -240,110 +273,6 @@ async def get_queue_stats(
     except Exception as e:
         logger.error(f"Error getting queue stats: {e}")
         raise HTTPException(status_code=500, detail="Error retrieving queue statistics")
-
-
-# ============================================================================
-# CACHE MANAGEMENT
-# ============================================================================
-
-
-@router.get("/stats/cache")
-async def get_cache_stats(
-    _: Annotated[None, Depends(get_current_admin_user)] = None,
-):
-    """
-    Get Redis cache statistics and performance metrics
-    """
-    try:
-        redis_client = redis.from_url(str(settings.REDIS_URL), decode_responses=True)
-        info = redis_client.info()
-        
-        hits = int(info.get("keyspace_hits", 0))
-        misses = int(info.get("keyspace_misses", 0))
-        total = hits + misses
-        
-        return {
-            "timestamp": datetime.utcnow().isoformat(),
-            "status": "✅ connected",
-            "memory": {
-                "used": info.get("used_memory_human", "N/A"),
-                "peak": info.get("used_memory_peak_human", "N/A"),
-                "max": info.get("maxmemory_human", "unlimited"),
-                "fragmentation": info.get("mem_fragmentation_ratio", "N/A"),
-            },
-            "performance": {
-                "hits": hits,
-                "misses": misses,
-                "total_commands": info.get("total_commands_processed", 0),
-                "hit_ratio": f"{(hits / total * 100):.2f}%" if total > 0 else "0%",
-            },
-            "keys": {
-                "total": redis_client.dbsize(),
-            },
-            "clients": {
-                "connected": info.get("connected_clients", 0),
-            },
-        }
-    except Exception as e:
-        logger.error(f"Error getting cache stats: {e}")
-        return {
-            "status": "❌ disconnected",
-            "error": str(e),
-        }
-
-
-@router.delete("/cache/clear")
-async def clear_cache(
-    _: Annotated[None, Depends(get_current_admin_user)] = None,
-):
-    """
-    Clear all cache (use with caution!)
-    """
-    try:
-        redis_client = redis.from_url(str(settings.REDIS_URL))
-        
-        before_count = redis_client.dbsize()
-        redis_client.flushdb()
-        after_count = redis_client.dbsize()
-        
-        return {
-            "success": True,
-            "timestamp": datetime.utcnow().isoformat(),
-            "cleared": before_count - after_count,
-            "message": f"Cache cleared: {before_count - after_count} keys removed",
-        }
-    except Exception as e:
-        logger.error(f"Error clearing cache: {e}")
-        raise HTTPException(status_code=500, detail="Error clearing cache")
-
-
-@router.post("/cache/optimize")
-async def optimize_cache(
-    _: Annotated[None, Depends(get_current_admin_user)] = None,
-):
-    """
-    Optimize Redis cache (cleanup, rebalance, etc.)
-    """
-    try:
-        redis_client = redis.from_url(str(settings.REDIS_URL), decode_responses=True)
-        
-        # Get current stats
-        info_before = redis_client.info()
-        
-        # Bgsave for persistence
-        redis_client.bgsave()
-        
-        return {
-            "success": True,
-            "timestamp": datetime.utcnow().isoformat(),
-            "actions": [
-                "Background save initiated",
-            ],
-            "memory_before": info_before.get("used_memory_human", "N/A"),
-        }
-    except Exception as e:
-        logger.error(f"Error optimizing cache: {e}")
-        raise HTTPException(status_code=500, detail="Error optimizing cache")
 
 
 # ============================================================================
