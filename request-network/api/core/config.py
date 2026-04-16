@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     EXPORT_DIR: str = "/app/exports"
     
     # CORS
-    BACKEND_CORS_ORIGINS: str = "http://localhost:3001,http://localhost:3000,http://192.168.214.146:3002"
+    BACKEND_CORS_ORIGINS: str = "http://localhost:3001,http://localhost:3000,http://192.168.214.146:3002,http://192.168.214.146:3000,http://192.168.214.141:3001"
 
     @property
     def cors_origins_list(self) -> list[str]:

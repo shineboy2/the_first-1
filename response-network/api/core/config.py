@@ -28,7 +28,12 @@ class Settings(BaseSettings):
     DEV_MODE: bool = True
 
     # CORS settings
-    BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000"]
+    BACKEND_CORS_ORIGINS: List[str] = [
+        "http://localhost:3000",
+        "http://localhost:8080",
+        "http://192.168.214.141:3000",
+        "http://192.168.214.146:3000",
+    ]
 
     # Redis URL (for Celery stats)
     REDIS_URL: RedisDsn = "redis://redis-response:6379/0"
@@ -56,6 +61,22 @@ class Settings(BaseSettings):
     @property
     def DATABASE_URL(self) -> str:
         return f"postgresql+asyncpg://{self.RESPONSE_DB_USER}:{self.RESPONSE_DB_PASSWORD}@{self.RESPONSE_DB_HOST}:{self.RESPONSE_DB_PORT}/{self.RESPONSE_DB_NAME}"
+
+    @property
+    def cors_origins_list(self) -> List[str]:
+        """Parse CORS origins from string or list format"""
+        if isinstance(self.BACKEND_CORS_ORIGINS, list):
+            return self.BACKEND_CORS_ORIGINS
+        if isinstance(self.BACKEND_CORS_ORIGINS, str):
+            # Parse comma-separated or JSON list
+            if self.BACKEND_CORS_ORIGINS.startswith("["):
+                import json
+                try:
+                    return json.loads(self.BACKEND_CORS_ORIGINS)
+                except:
+                    pass
+            return [origin.strip() for origin in self.BACKEND_CORS_ORIGINS.split(",") if origin.strip()]
+        return []
 
 
     model_config = SettingsConfigDict(

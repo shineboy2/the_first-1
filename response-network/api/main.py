@@ -24,6 +24,7 @@ from routers import admin_export_control
 from routers import admin_panel
 from routers import profile_type_access
 from routers import external_apis
+from routers import elasticsearch_config
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -55,15 +56,13 @@ async def custom_swagger_ui_html():
 from auth.dependencies import oauth2_scheme
 
 # Set all CORS enabled origins
-# Set all CORS enabled origins
 if settings.BACKEND_CORS_ORIGINS:
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
+        allow_origins=settings.cors_origins_list,
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+        allow_methods=["*"],
         allow_headers=["*"],
-        expose_headers=["Content-Type", "Content-Length"],
     )
 
 
@@ -130,6 +129,9 @@ app.include_router(external_apis.router, prefix=settings.API_V1_STR, dependencie
 
 # Admin Exports router (for Frontend compatibility)
 app.include_router(admin_exports.router, prefix=settings.API_V1_STR, dependencies=[Depends(oauth2_scheme)])
+
+# Elasticsearch Configuration router
+app.include_router(elasticsearch_config.router, prefix=settings.API_V1_STR, dependencies=[Depends(oauth2_scheme)])
 
 
 # Auth endpoints are now properly routed through auth_router at /api/v1/auth/
