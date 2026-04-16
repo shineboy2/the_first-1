@@ -50,3 +50,4 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 # Aliases for compatibility
 async_session_maker = async_session
+async_engine = engine

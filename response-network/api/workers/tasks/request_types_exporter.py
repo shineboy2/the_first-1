@@ -114,8 +114,8 @@ def export_request_types_to_request_network():
             user = config.get("ftp_user")
             passwd = config.get("ftp_password")
             port = config.get("ftp_port", 21)
-            base_remote = config.get("ftp_path", "/uploads/settings")
-            remote_path = base_remote.rsplit("/", 1)[0] + "/request_types"
+            # Use dedicated /settings/request_types path for request types export
+            remote_path = "/settings/request_types"
             use_tls = config.get("ftp_use_tls", False)
             
             if not host:

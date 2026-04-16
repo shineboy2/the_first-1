@@ -10,12 +10,12 @@ from sqlalchemy.orm import sessionmaker
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from models.settings import Settings
-from db.session import DATABASE_URL
+from core.config import settings
 
 async def setup_config(ftp_host, ftp_user, ftp_pass, ftp_path):
     print("🔧 Setting up Initial FTP Configuration...")
     
-    engine = create_async_engine(DATABASE_URL)
+    engine = create_async_engine(settings.DATABASE_URL)
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     
     config_value = {

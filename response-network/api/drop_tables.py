@@ -4,6 +4,9 @@ from db.session import async_session
 
 async def drop_all():
     tables = [
+        'incoming_requests',
+        'query_results',
+        'profile_type_request_access',
         'user_request_access',
         'request_type_parameters',
         'request_types',
@@ -11,7 +14,8 @@ async def drop_all():
         'settings',
         'requests',
         'users',
-        'query_results',
+        'profile_type_configs',
+        'worker_settings',
         'alembic_version'
     ]
     

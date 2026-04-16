@@ -101,7 +101,8 @@ def export_settings_to_request_network():
             user = config.get("ftp_user")
             passwd = config.get("ftp_password")
             port = config.get("ftp_port", 21)
-            remote_path = config.get("ftp_path", "/uploads/settings")
+            # Use dedicated /settings path for settings export
+            remote_path = "/settings"
             use_tls = config.get("ftp_use_tls", False)
             
             if not host:

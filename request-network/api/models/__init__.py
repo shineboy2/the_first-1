@@ -4,6 +4,7 @@ from .response import Response
 from .api_key import ApiKey
 from .audit_log import AuditLog
 from .batch import ImportBatch, ExportBatch
+from .settings import Settings, UserSettings
 
 __all__ = [
     "User",
@@ -12,5 +13,7 @@ __all__ = [
     "ApiKey",
     "AuditLog",
     "ImportBatch",
-    "ExportBatch"
+    "ExportBatch",
+    "Settings",
+    "UserSettings"
 ]

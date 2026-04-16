@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 api_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, api_dir)
 # Add the project root to the path to find the 'shared' module.
-project_root = os.path.realpath(os.path.join(api_dir, "..", ".."))
+project_root = api_dir # The .env is usually here in the container
 sys.path.insert(0, project_root)
 
 # --- Alembic Config ---
@@ -35,6 +35,7 @@ from models.user import User
 from models.request import Request
 from models.batch import ExportBatch, ImportBatch # noqa
 from models.api_key import ApiKey
+from models.settings import Settings # noqa
 
 # Try to import AuditLog if it exists
 try:
@@ -44,8 +45,8 @@ except ImportError:
 
 def get_database_url():
     """Construct the database URL from environment variables."""
-    # Load variables from .env file at the project root
-    load_dotenv(os.path.join(project_root, ".env"))
+    # Load variables from .env file at the app root
+    load_dotenv(os.path.join(api_dir, ".env"))
 
     user = os.getenv("REQUEST_DB_USER", "user")
     password = os.getenv("REQUEST_DB_PASSWORD", "password")

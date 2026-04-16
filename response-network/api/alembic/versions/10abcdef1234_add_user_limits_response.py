@@ -25,13 +25,8 @@ def upgrade() -> None:
     
     op.add_column('users', sa.Column('allowed_request_types', postgresql.JSONB(astext_type=sa.Text()), server_default='[]', nullable=False))
     op.add_column('users', sa.Column('blocked_request_types', postgresql.JSONB(astext_type=sa.Text()), server_default='[]', nullable=False))
-    
-    op.add_column('users', sa.Column('daily_request_limit', sa.Integer(), server_default='100', nullable=False))
-    op.add_column('users', sa.Column('monthly_request_limit', sa.Integer(), server_default='2000', nullable=False))
 
 def downgrade() -> None:
-    op.drop_column('users', 'monthly_request_limit')
-    op.drop_column('users', 'daily_request_limit')
     op.drop_column('users', 'blocked_request_types')
     op.drop_column('users', 'allowed_request_types')
     op.drop_column('users', 'synced_at')

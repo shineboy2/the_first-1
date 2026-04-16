@@ -138,7 +138,9 @@ def export_users_to_request_network():
             user = config.get("ftp_user")
             passwd = config.get("ftp_password")
             port = config.get("ftp_port", 21)
-            remote_path = config.get("ftp_path", "/uploads/users")
+            # Use dedicated /users path for users export
+            base_ftp_path = config.get("ftp_path", "/uploads")
+            remote_path = "/users"  # Fixed path for user exports
             use_tls = config.get("ftp_use_tls", False)
             
             logger.info(f"Connecting to FTP: {host}:{port} as {user}")

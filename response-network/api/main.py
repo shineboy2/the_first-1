@@ -32,18 +32,24 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     description="Monitoring and Admin API for the isolated Response Network.",
     version="0.1.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_tags=[
-        {"name": "system", "description": "System health endpoints"},
-        {"name": "monitoring", "description": "Monitoring and statistics endpoints"},
-        {"name": "auth", "description": "Authentication operations"},
-        {"name": "users", "description": "User management operations"},
-        {"name": "requests", "description": "Request handling endpoints"},
-        {"name": "request-types", "description": "Manage request types and their parameters"},
-        {"name": "profile types", "description": "User profile types management"}
-    ]
+    openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    docs_url=None,  # Disable default Swagger
+    redoc_url=None
 )
+
+# Mount static files for offline Swagger UI
+from fastapi.staticfiles import StaticFiles
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+from custom_swagger import get_swagger_ui_html
+
+# Custom Swagger UI endpoint (offline)
+@app.get("/docs", include_in_schema=False)
+async def custom_swagger_ui_html():
+    return get_swagger_ui_html(
+        openapi_url=app.openapi_url,
+        title=app.title + " - Swagger UI",
+    )
 
 # Configure Security
 from auth.dependencies import oauth2_scheme
