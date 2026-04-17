@@ -98,10 +98,10 @@ services:
       context: ./admin-panel
       dockerfile: Dockerfile
       args:
-        - NEXT_PUBLIC_API_URL=${ADMIN_API_URL:-http://192.168.214.141:8000}
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://192.168.214.141:8000}
     container_name: response-admin-panel
     environment:
-      - NEXT_PUBLIC_API_URL=${ADMIN_API_URL:-http://192.168.214.141:8000}
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://192.168.214.141:8000}
       - NODE_ENV=production
     ports:
       - "${ADMIN_PORT:-3000}:3000"

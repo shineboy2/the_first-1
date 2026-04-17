@@ -25,8 +25,14 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       token: null,
       isLoading: false,
-      setUser: (user) => set({ user }),
-      setToken: (token) => set({ token }),
+      setUser: (user) => {
+        console.log('Setting user:', user);
+        set({ user });
+      },
+      setToken: (token) => {
+        console.log('Setting token:', token ? 'present' : 'null');
+        set({ token });
+      },
       logout: () => {
         set({ user: null, token: null });
         // Clear auth-token cookie

@@ -107,9 +107,11 @@ export default function LoginPage() {
         setUser(user);
       }
 
-      // Redirect to dashboard
-      router.push("/dashboard");
-      router.refresh();
+      // Wait a bit for zustand persist to complete
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Redirect to dashboard with hard reload to ensure middleware runs
+      window.location.href = "/dashboard";
     } catch (error: unknown) {
       console.error("Login error:", error);
 

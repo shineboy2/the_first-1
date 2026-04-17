@@ -13,6 +13,7 @@ import {
   Moon,
   Sun,
   FileText,
+  Database,
 } from "lucide-react";
 import { useState } from "react";
 import { useTheme } from "next-themes";
@@ -32,6 +33,11 @@ const navigation = [
     name: "درخواست‌ها",
     href: "/dashboard/requests",
     icon: FileText,
+  },
+  {
+    name: "تنظیمات Elasticsearch",
+    href: "/dashboard/elasticsearch-configs",
+    icon: Database,
   },
   {
     name: "تنظیمات همگام‌سازی",

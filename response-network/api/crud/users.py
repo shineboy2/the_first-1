@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 
 from models.user import User
 from models.request import Request
+from models.profile_type import ProfileType
 from models.schemas import UserCreate, UserUpdate, UserStats
 from core.security import get_password_hash
 
@@ -134,6 +135,13 @@ async def create_user(db: AsyncSession, user_in: UserCreate) -> User:
 async def update_user(db: AsyncSession, user: User, user_in: UserUpdate) -> User:
     """Update user information."""
     update_data = user_in.model_dump(exclude_unset=True)
+    
+    # Validate profile_type if being updated
+    if 'profile_type' in update_data and update_data['profile_type']:
+        result = await db.execute(select(ProfileType).where(ProfileType.name == update_data['profile_type']))
+        profile = result.scalar_one_or_none()
+        if not profile:
+            raise ValueError(f"Profile type '{update_data['profile_type']}' does not exist")
     
     if update_data.get("password"):
         update_data["hashed_password"] = get_password_hash(update_data.pop("password"))

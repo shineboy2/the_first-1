@@ -151,6 +151,32 @@ export interface ExternalAPI {
   updated_at: string;
 }
 
+export interface ElasticsearchConfig {
+  id: string;
+  url: string;
+  username?: string;
+  verify_ssl: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ElasticsearchConfigCreate {
+  url: string;
+  username?: string;
+  password?: string;
+  verify_ssl?: boolean;
+  is_active?: boolean;
+}
+
+export interface ElasticsearchConfigUpdate {
+  url?: string;
+  username?: string;
+  password?: string;
+  verify_ssl?: boolean;
+  is_active?: boolean;
+}
+
 // ============================================================================
 // Health Service
 // ============================================================================
@@ -747,6 +773,51 @@ export const externalApiService = {
   },
 };
 
+// ============================================================================
+// Elasticsearch Config Service
+// ============================================================================
+
+export const elasticsearchConfigService = {
+  async getActiveConfig(): Promise<ElasticsearchConfig> {
+    const response = await api.get("/api/v1/admin/elasticsearch/config/active");
+    return response.data;
+  },
+
+  async getConfigs(): Promise<ElasticsearchConfig[]> {
+    const response = await api.get("/api/v1/admin/elasticsearch/config");
+    return response.data;
+  },
+
+  async getConfig(id: string): Promise<ElasticsearchConfig> {
+    const response = await api.get(`/api/v1/admin/elasticsearch/config/${id}`);
+    return response.data;
+  },
+
+  async createConfig(data: ElasticsearchConfigCreate): Promise<ElasticsearchConfig> {
+    const response = await api.post("/api/v1/admin/elasticsearch/config", data);
+    return response.data;
+  },
+
+  async updateConfig(id: string, data: ElasticsearchConfigUpdate): Promise<ElasticsearchConfig> {
+    const response = await api.put(`/api/v1/admin/elasticsearch/config/${id}`, data);
+    return response.data;
+  },
+
+  async deleteConfig(id: string): Promise<void> {
+    await api.delete(`/api/v1/admin/elasticsearch/config/${id}`);
+  },
+
+  async testConfig(id: string): Promise<{ success: boolean; message: string; config_id: string }> {
+    const response = await api.post(`/api/v1/admin/elasticsearch/config/${id}/test`);
+    return response.data;
+  },
+
+  async testNewConfig(data: ElasticsearchConfigCreate): Promise<{ success: boolean; message: string }> {
+    const response = await api.post("/api/v1/admin/elasticsearch/config/test-new", data);
+    return response.data;
+  },
+};
+
 const adminApi = {
   healthService,
   statsService,
@@ -761,6 +832,7 @@ const adminApi = {
   exportConfigService,
   storageConfigService,
   externalApiService,
+  elasticsearchConfigService,
 };
 
 export default adminApi;

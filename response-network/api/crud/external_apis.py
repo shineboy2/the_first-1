@@ -1,44 +1,54 @@
 from typing import List, Optional
 from uuid import UUID
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from models.external_api import ExternalAPI
 from schemas.external_api import ExternalAPICreate, ExternalAPIUpdate
 
-def get_external_api(db: Session, api_id: UUID) -> Optional[ExternalAPI]:
-    return db.query(ExternalAPI).filter(ExternalAPI.id == api_id).first()
 
-def get_external_api_by_name(db: Session, name: str) -> Optional[ExternalAPI]:
-    return db.query(ExternalAPI).filter(ExternalAPI.name == name).first()
+async def get_external_api(db: AsyncSession, api_id: UUID) -> Optional[ExternalAPI]:
+    result = await db.execute(select(ExternalAPI).where(ExternalAPI.id == api_id))
+    return result.scalar_one_or_none()
 
-def get_external_apis(
-    db: Session, skip: int = 0, limit: int = 100
+
+async def get_external_api_by_name(db: AsyncSession, name: str) -> Optional[ExternalAPI]:
+    result = await db.execute(select(ExternalAPI).where(ExternalAPI.name == name))
+    return result.scalar_one_or_none()
+
+
+async def get_external_apis(
+    db: AsyncSession, skip: int = 0, limit: int = 100
 ) -> List[ExternalAPI]:
-    return db.query(ExternalAPI).offset(skip).limit(limit).all()
+    result = await db.execute(select(ExternalAPI).offset(skip).limit(limit))
+    return result.scalars().all()
 
-def create_external_api(db: Session, api: ExternalAPICreate) -> ExternalAPI:
+
+async def create_external_api(db: AsyncSession, api: ExternalAPICreate) -> ExternalAPI:
     db_api = ExternalAPI(**api.model_dump())
     db.add(db_api)
-    db.commit()
-    db.refresh(db_api)
+    await db.commit()
+    await db.refresh(db_api)
     return db_api
 
-def update_external_api(
-    db: Session, api_id: UUID, api: ExternalAPIUpdate
+
+async def update_external_api(
+    db: AsyncSession, api_id: UUID, api: ExternalAPIUpdate
 ) -> Optional[ExternalAPI]:
-    db_api = get_external_api(db, api_id)
+    db_api = await get_external_api(db, api_id)
     if db_api:
         update_data = api.model_dump(exclude_unset=True)
         for key, value in update_data.items():
             setattr(db_api, key, value)
-        db.commit()
-        db.refresh(db_api)
+        await db.commit()
+        await db.refresh(db_api)
     return db_api
 
-def delete_external_api(db: Session, api_id: UUID) -> bool:
-    db_api = get_external_api(db, api_id)
+
+async def delete_external_api(db: AsyncSession, api_id: UUID) -> bool:
+    db_api = await get_external_api(db, api_id)
     if db_api:
-        db.delete(db_api)
-        db.commit()
+        await db.delete(db_api)
+        await db.commit()
         return True
     return False

@@ -12,7 +12,7 @@ from models.request_type import RequestType
 from models.request_access import UserRequestAccess
 from auth.dependencies import get_current_admin_user, get_current_user
 from crud import users as user_service
-from schemas.request_access import UserRequestAccessCreate, UserRequestAccessRead, UserRequestAccessInput
+from schemas.request_access import UserRequestAccessCreate, UserRequestAccessRead, UserRequestAccessReadSimple, UserRequestAccessInput
 from workers.celery_app import celery_app
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -79,7 +79,7 @@ async def get_user(
     return await user_service.get_user_with_stats(db, user_id)
 
 
-@router.post("/{user_id}/request-access", response_model=List[UserRequestAccessRead])
+@router.post("/{user_id}/request-access", response_model=List[UserRequestAccessReadSimple])
 async def grant_request_type_access(
     user_id: UUID,
     request_types: List[UserRequestAccessInput],
@@ -139,7 +139,7 @@ async def grant_request_type_access(
     return access_records
 
 
-@router.get("/{user_id}/request-access", response_model=List[UserRequestAccessRead])
+@router.get("/{user_id}/request-access", response_model=List[UserRequestAccessReadSimple])
 async def list_user_request_access(
     user_id: UUID,
     current_user: UserModel = Depends(get_current_admin_user),
@@ -182,14 +182,7 @@ async def revoke_request_type_access(
     
     await session.commit()
     return {"status": "success"}
-    """
-    Get detailed information about a specific user including their request statistics.
-    Only admins can access this endpoint.
-    """
-    user = await user_service.get_user_with_stats(db, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return user
+
 
 @router.put("/{user_id}", response_model=User)
 async def update_user(

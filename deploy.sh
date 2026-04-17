@@ -45,6 +45,11 @@ deploy_network() {
     # 3. Reload Docker Containers with sudo
     # We use 'ssh -t' to allocate a pseudo-tty which sudo sometimes requires, 
     # and 'sudo -S' to pass the password securely via echo pipe.
+    if [ "$RESET_DB" == "true" ]; then
+        echo "🗑️ Cleaning Docker volumes for database reset..."
+        sshpass -p "$PASS" ssh -o "StrictHostKeyChecking=no" -t ${USER}@${HOST} \
+            "cd ${TARGET_DIR} && echo '$PASS' | sudo -S docker compose -p ${NETWORK} down -v"
+    fi
     echo "🐳 Rebuilding and restarting Docker containers..."
     sshpass -p "$PASS" ssh -o "StrictHostKeyChecking=no" -t ${USER}@${HOST} \
         "cd ${TARGET_DIR} && echo '$PASS' | sudo -S docker compose -p ${NETWORK} up --build -d"
@@ -74,11 +79,17 @@ deploy_network() {
 
 # Input validation
 INIT_DB="false"
+RESET_DB="false"
 TARGET_NET="$1"
 
 if [ "$2" == "--init" ]; then
     INIT_DB="true"
     echo "⚙️ Initialization flag detected - will run setup scripts."
+fi
+
+if [ "$2" == "--reset-db" ] || [ "$3" == "--reset-db" ]; then
+    RESET_DB="true"
+    echo "🔄 Database reset flag detected - will clean volumes before deployment."
 fi
 
 if [ "$TARGET_NET" == "response" ]; then
@@ -89,6 +100,6 @@ elif [ "$TARGET_NET" == "all" ]; then
     deploy_network "response-network" "$RESPONSE_HOST" "$RESPONSE_USER" "$RESPONSE_PASS"
     deploy_network "request-network" "$REQUEST_HOST" "$REQUEST_USER" "$REQUEST_PASS"
 else
-    echo "Usage: ./deploy.sh [response | request | all] [--init]"
-    echo "Example: ./deploy.sh all --init"
+    echo "Usage: ./deploy.sh [response | request | all] [--init] [--reset-db]"
+    echo "Example: ./deploy.sh all --init --reset-db"
 fi

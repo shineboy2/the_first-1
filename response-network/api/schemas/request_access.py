@@ -50,3 +50,15 @@ class UserRequestAccessRead(UserRequestAccessBase):
 
     class Config:
         from_attributes = True
+
+
+class UserRequestAccessReadSimple(UserRequestAccessBase):
+    """Simple read schema without nested relationships for async context compatibility"""
+    id: UUID
+    user_id: UUID
+    request_type_id: UUID
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

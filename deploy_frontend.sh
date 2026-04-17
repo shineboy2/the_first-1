@@ -12,7 +12,9 @@ tar -cvf frontend_update.tar \
     "app/dashboard/layout.tsx" \
     "app/(auth)/api.ts" \
     "lib/stores/auth-store.ts" \
-    "lib/services/admin-api.ts"
+    "lib/services/admin-api.ts" \
+    "app/dashboard/" \
+    "components/"
 
 echo "⬆️ Uploading bundle to server..."
 scp frontend_update.tar "$SERVER:/tmp/"

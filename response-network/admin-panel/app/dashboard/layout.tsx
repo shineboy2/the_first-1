@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import Link from "next/link";
@@ -21,8 +21,8 @@ import {
   ListTodo,
   Download,
   Globe,
+  Database,
 } from "lucide-react";
-import { useState } from "react";
 import { useTheme } from "next-themes";
 
 const navigation = [
@@ -66,6 +66,11 @@ const navigation = [
     href: "/dashboard/external-apis",
     icon: Globe,
   },
+  {
+    name: "تنظیمات Elasticsearch",
+    href: "/dashboard/elasticsearch-configs",
+    icon: Database,
+  },
 
   {
     name: "انواع پروفایل",
@@ -93,14 +98,6 @@ export default function DashboardLayout({
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  useEffect(() => {
-    if (!isLoading && !user) {
-      // Hard redirect ensures server middleware runs.
-      // Call logout() to clear any stray cookies that would cause middleware redirect loops!
-      logout();
-    }
-  }, [user, isLoading, logout]);
 
   const handleLogout = () => {
     // auth store handles clearing cookie, localStorage, and redirect

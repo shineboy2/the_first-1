@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 import uuid
 
 
@@ -36,6 +36,13 @@ class UserCreate(UserBase):
     is_active: bool = True
     is_admin: bool = False
 
+    @field_validator('profile_type')
+    @classmethod
+    def validate_profile_type(cls, v):
+        if not v or not isinstance(v, str):
+            raise ValueError('profile_type must be a non-empty string')
+        return v
+
 
 class UserUpdate(BaseModel):
     """Properties that can be updated."""
@@ -43,6 +50,14 @@ class UserUpdate(BaseModel):
     full_name: str | None = None
     username: str | None = None
     password: str | None = None
+    profile_type: str | None = None
+
+    @field_validator('profile_type')
+    @classmethod
+    def validate_profile_type(cls, v):
+        if v is not None and not v:
+            raise ValueError('profile_type must be a non-empty string')
+        return v
 
 
 class ChangePasswordRequest(BaseModel):
