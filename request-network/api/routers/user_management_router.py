@@ -1,16 +1,18 @@
 import uuid
-from typing import Annotated, List
+from typing import Annotated, Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from db.session import get_db_session
+from db.redis_client import get_redis_client
 from auth.dependencies import require_admin, get_current_user
 from models.user import User
 from models.api_key import ApiKey
 from schemas.user import User as UserSchema
 from schemas.api_key import APIKeyCreate, APIKeyRead, APIKeyGenerated
+from rate_limiter import RateLimiter
 import secrets
 
 router = APIRouter(
@@ -45,18 +47,33 @@ async def list_users(
     return users
 
 
-@router.get("/users/{user_id}", response_model=UserSchema)
+class AdminUserDetails(UserSchema):
+    rate_limit_stats: Dict[str, Any] = {}
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/users/{user_id}", response_model=AdminUserDetails)
 async def get_user_details(
     user_id: uuid.UUID,
     db: AsyncSession = Depends(get_db_session),
 ):
     """
-    Get detailed information for a specific user. Admins only.
+    Get detailed information for a specific user, including rate limit stats.
+    Admins only.
     """
     user = await db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    return user
+
+    redis_client = await get_redis_client()
+    rate_limiter = RateLimiter(redis_client.client)
+    stats = await rate_limiter.get_user_stats(str(user.id), user.profile_type)
+
+    user_data = UserSchema.model_validate(user).model_dump()
+    user_data["rate_limit_stats"] = stats
+    return user_data
 
 
 @router.post("/users/{user_id}/activate", response_model=UserSchema)

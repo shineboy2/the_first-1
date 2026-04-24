@@ -1,0 +1,78 @@
+{
+  "users": [
+    {
+      "id": "7729d11a-9cfc-4560-b972-e32bb39d9eb8",
+      "username": "admin",
+      "email": "admin@example.com",
+      "hashed_password": "$2b$12$pP8LViU3I550NmSjbd5Ck.MYD8q2fKeYHEnDNySzIf1XQ5XTcUaey",
+      "full_name": "System Administrator",
+      "profile_type": "admin",
+      "is_active": true,
+      "allowed_request_types": [
+        "*"
+      ],
+      "blocked_request_types": [],
+      "allowed_external_apis": [],
+      "rate_limit_per_minute": 1000,
+      "rate_limit_per_hour": 100,
+      "rate_limit_per_day": 500,
+      "daily_request_limit": 100000,
+      "monthly_request_limit": 1000000,
+      "priority": 5,
+      "created_at": "2026-04-17T08:47:00.291676+00:00",
+      "updated_at": "2026-04-22T06:56:50.014426+00:00"
+    },
+    {
+      "id": "c8464a1e-1479-468d-bfa5-aa8d002d50a2",
+      "username": "shahab",
+      "email": "azizimasoud066@gmail.com",
+      "hashed_password": "$2b$12$Nb9kz.iEiSVOv/bavHP.IOjLlj3TRigK0KZlkaKgr8pj8jDmOmFDi",
+      "full_name": "تست شهاب",
+      "profile_type": "verified_user",
+      "is_active": true,
+      "allowed_request_types": [
+        "basic",
+        "advanced"
+      ],
+      "blocked_request_types": [
+        "admin_only"
+      ],
+      "allowed_external_apis": [],
+      "rate_limit_per_minute": 60,
+      "rate_limit_per_hour": 100,
+      "rate_limit_per_day": 500,
+      "daily_request_limit": 1000,
+      "monthly_request_limit": 10000,
+      "priority": 5,
+      "created_at": "2026-04-22T20:37:10.217500+00:00",
+      "updated_at": "2026-04-22T20:37:10.217500+00:00"
+    },
+    {
+      "id": "d682109c-b34e-4781-8389-9ea759e03b4e",
+      "username": "test_user",
+      "email": "azizimaud066@gmail.com",
+      "hashed_password": "$2b$12$HAGOLmJlTciq.ER9sTXYauLvq3xeJIBFET5Nv/XwijdBuEkWM5WHu",
+      "full_name": "کاربر تست",
+      "profile_type": "basic_user",
+      "is_active": true,
+      "allowed_request_types": [
+        "basic"
+      ],
+      "blocked_request_types": [
+        "advanced",
+        "admin_only"
+      ],
+      "allowed_external_apis": [],
+      "rate_limit_per_minute": 10,
+      "rate_limit_per_hour": 100,
+      "rate_limit_per_day": 500,
+      "daily_request_limit": 100,
+      "monthly_request_limit": 1000,
+      "priority": 5,
+      "created_at": "2026-04-22T20:38:07.708751+00:00",
+      "updated_at": "2026-04-22T20:38:07.708751+00:00"
+    }
+  ],
+  "exported_at": "2026-04-24T11:06:13.151643",
+  "total_count": 3
+}

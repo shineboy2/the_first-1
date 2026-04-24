@@ -30,6 +30,7 @@ from models.user import User
 # Import all models to resolve dependencies
 from models.profile_type import ProfileType  # noqa
 from models.request_type import RequestType  # noqa
+from models.request_access import UserRequestAccess  # noqa
 from models.profile_type_request_access import ProfileTypeRequestAccess  # noqa
 from models.profile_type_config import ProfileTypeConfig  # noqa
 
@@ -84,6 +85,55 @@ def export_users_to_request_network():
             select(ProfileTypeConfig)
         )
         profile_configs = {pt.name: pt for pt in profile_result.scalars().all()}
+        logger.info(f"Pre-fetched {len(profile_configs)} profile type configurations.")
+        
+        # Pre-fetch request types (for converting IDs to names)
+        request_types_result = session.execute(
+            select(RequestType)
+        )
+        request_types_by_id = {rt.id: rt.name for rt in request_types_result.scalars().all()}
+        logger.info(f"Pre-fetched {len(request_types_by_id)} request types.")
+        
+        # Pre-fetch user-specific access records
+        user_access_result = session.execute(
+            select(UserRequestAccess)
+        )
+        user_access_records = user_access_result.scalars().all()
+        # Group by user_id for easy lookup
+        user_access_by_user_id = {}
+        for access in user_access_records:
+            if access.user_id not in user_access_by_user_id:
+                user_access_by_user_id[access.user_id] = []
+            user_access_by_user_id[access.user_id].append(access)
+        logger.info(f"Pre-fetched {len(user_access_records)} user-specific access records for {len(user_access_by_user_id)} users.")
+        
+        # Helper function to merge profile type and user-specific permissions
+        def merge_user_permissions(user_id, user_profile_type, profile_configs, user_access_by_user_id, request_types_by_id):
+            """
+            Merge profile type permissions with user-specific access overrides.
+            User-specific access is additive (extends profile type access).
+            """
+            # Start with profile type permissions
+            profile_type = profile_configs.get(user_profile_type, ProfileTypeConfig())
+            allowed_types = list(profile_type.permissions.get("allowed_request_types", []))
+            blocked_types = list(profile_type.permissions.get("blocked_request_types", []))
+            allowed_apis = list(profile_type.permissions.get("allowed_external_apis", []))
+            
+            # Apply user-specific access overrides if they exist
+            if user_id in user_access_by_user_id:
+                # User-specific overrides: add to allowed_request_types
+                user_accesses = user_access_by_user_id[user_id]
+                for access in user_accesses:
+                    if access.is_active:  # Only include active access records
+                        request_type_name = request_types_by_id.get(access.request_type_id)
+                        if request_type_name and request_type_name not in allowed_types:
+                            allowed_types.append(request_type_name)
+            
+            return {
+                "allowed_request_types": allowed_types,
+                "blocked_request_types": blocked_types,
+                "allowed_external_apis": allowed_apis
+            }
         
         # Prepare export data
         export_data = {
@@ -96,9 +146,7 @@ def export_users_to_request_network():
                     "full_name": user.full_name if hasattr(user, 'full_name') else None,
                     "profile_type": user.profile_type or "user",
                     "is_active": user.is_active,
-                    "allowed_request_types": profile_configs.get(user.profile_type, ProfileTypeConfig()).permissions.get("allowed_request_types", []) if user.profile_type in profile_configs else [],
-                    "blocked_request_types": profile_configs.get(user.profile_type, ProfileTypeConfig()).permissions.get("blocked_request_types", []) if user.profile_type in profile_configs else [],
-                    "allowed_external_apis": profile_configs.get(user.profile_type, ProfileTypeConfig()).permissions.get("allowed_external_apis", []) if user.profile_type in profile_configs else [],
+                    **merge_user_permissions(user.id, user.profile_type or "user", profile_configs, user_access_by_user_id, request_types_by_id),
                     "rate_limit_per_minute": profile_configs.get(user.profile_type).rate_limit_per_minute if user.profile_type in profile_configs else 10,
                     "rate_limit_per_hour": 100,
                     "rate_limit_per_day": 500,

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime, timedelta
@@ -9,6 +10,7 @@ from models.schemas import (
     PaginatedResponse, RequestPaginatedResponse
 )
 from models.user import User
+from models.incoming_request import IncomingRequest
 from auth.dependencies import get_current_user
 from crud import requests as request_service
 
@@ -117,27 +119,29 @@ async def retry_request(
     Retry a failed request.
     Resets status to 'pending' and clears error message.
     """
-    request = await request_service.get_request(db, request_id)
-    if not request:
+    result = await db.execute(select(IncomingRequest).where(IncomingRequest.id == request_id))
+    request_obj = result.scalar_one_or_none()
+    if not request_obj:
         raise HTTPException(status_code=404, detail="Request not found")
         
     # Check permissions
-    if current_user.profile_type != 'admin' and str(request.user_id) != str(current_user.id):
+    if current_user.profile_type != 'admin' and str(request_obj.user_id) != str(current_user.id):
          raise HTTPException(status_code=403, detail="Not authorized")
 
-    if request.status != 'failed':
+    if request_obj.status != 'failed':
         raise HTTPException(status_code=400, detail="Only failed requests can be retried")
 
     # Reset request
-    request.status = 'pending'
-    request.error_message = None
-    request.retry_count = 0 
-    request.updated_at = datetime.utcnow()
+    request_obj.status = 'pending'
+    request_obj.error_message = None
+    request_obj.retry_count = 0 
+    request_obj.updated_at = datetime.utcnow()
     
-    db.commit()
-    db.refresh(request)
+    db.add(request_obj)
+    await db.commit()
+    await db.refresh(request_obj)
     
-    return {"status": "success", "message": "Request queued for retry", "id": request.id}
+    return {"status": "success", "message": "Request queued for retry", "id": request_obj.id}
 
 
 @router.post("/requests/retry-all")

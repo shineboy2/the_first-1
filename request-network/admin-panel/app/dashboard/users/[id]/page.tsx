@@ -67,15 +67,14 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
             setError(null);
             setGeneratedKey(null);
 
-            const [userData, keysData, limitsData] = await Promise.all([
+            const [userData, keysData] = await Promise.all([
                 userService.getUserById(params.id),
-                apiKeyService.getUserApiKeys(params.id),
-                rateLimitService.getUserRateLimitStats(params.id)
+                apiKeyService.getUserApiKeys(params.id)
             ]);
 
             setUser(userData);
             setApiKeys(Array.isArray(keysData) ? keysData : []);
-            setRateLimit(limitsData);
+            setRateLimit(userData.rate_limit_stats ?? null);
 
             // Rate limit data loaded
 

@@ -2,15 +2,17 @@ import json
 from datetime import datetime
 import uuid
 from time import sleep
+import base64
 
 from celery import shared_task
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from core.config import settings
 from models.incoming_request import IncomingRequest
 from models.request_type import RequestType
 from models.query_result import QueryResult
+from models.elasticsearch_config import ElasticsearchConfig
 from services.external_api_handler import ExternalAPIHandler
 
 # Setup sync database connection for Celery
@@ -139,9 +141,32 @@ def execute_pending_queries(self):
 
                 query_body = render_template(request_type.elasticsearch_query_template, req.query_params or {})
                 
-                # Execute Query
+                # Execute Query - Get Elasticsearch config from runtime database
                 index_name = request_type.available_indices[0] if request_type.available_indices else "default"
-                base_url = str(settings.ELASTICSEARCH_URL).rstrip('/')
+                
+                # Try to get active Elasticsearch config from database
+                es_config = None
+                try:
+                    es_config_result = db.query(ElasticsearchConfig).filter(
+                        ElasticsearchConfig.is_active == True
+                    ).first()
+                    es_config = es_config_result
+                except Exception as e:
+                    import logging
+                    logging.warning(f"Failed to load Elasticsearch config from database: {e}")
+                
+                # Use runtime config if available, otherwise fall back to settings
+                if es_config:
+                    base_url = es_config.url.rstrip('/')
+                    es_auth = None
+                    if es_config.username and es_config.password:
+                        credentials = f"{es_config.username}:{es_config.password}"
+                        encoded_credentials = base64.b64encode(credentials.encode()).decode()
+                        es_auth = f"Basic {encoded_credentials}"
+                else:
+                    base_url = str(settings.ELASTICSEARCH_URL).rstrip('/')
+                    es_auth = None
+                
                 es_url = f"{base_url}/{index_name}/_search"
                 
                 import urllib.request
@@ -149,6 +174,10 @@ def execute_pending_queries(self):
                 
                 req_data = json.dumps(query_body).encode('utf-8')
                 req_obj = urllib.request.Request(es_url, data=req_data, headers={'Content-Type': 'application/json'})
+                
+                # Add authentication header if needed
+                if es_auth:
+                    req_obj.add_header('Authorization', es_auth)
                 
                 try:
                     with urllib.request.urlopen(req_obj, timeout=10.0) as f:
@@ -162,6 +191,7 @@ def execute_pending_queries(self):
                          raise Exception(f"Elasticsearch Error ({e.code}): {e.read().decode('utf-8')}")
                 except Exception as e:
                      raise Exception(f"Elasticsearch Connection Error: {str(e)}")
+
                 
                 # Transform Result
                 hits = es_result.get("hits", {}).get("hits", [])

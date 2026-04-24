@@ -184,7 +184,6 @@ async def grant_access_to_users(
     )
     
     # Create new access records
-    access_records = []
     for user_id in data.user_ids:
         access = UserRequestAccess(
             user_id=user_id,
@@ -193,13 +192,21 @@ async def grant_access_to_users(
             is_active=data.is_active
         )
         db.add(access)
-        access_records.append(access)
     
     await db.commit()
-    for record in access_records:
-        await db.refresh(record)
     
-    return access_records
+    # Query the created records with eager-loaded user relationship
+    # This prevents MissingGreenlet error when Pydantic tries to serialize the user field
+    result = await db.execute(
+        select(UserRequestAccess)
+        .options(selectinload(UserRequestAccess.user))
+        .where(and_(
+            UserRequestAccess.request_type_id == request_type_id,
+            UserRequestAccess.user_id.in_(data.user_ids)
+        ))
+    )
+    
+    return result.scalars().all()
 
 
 @router.get("/{request_type_id}/access", response_model=List[UserRequestAccessRead])
