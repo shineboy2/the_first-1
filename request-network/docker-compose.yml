@@ -54,6 +54,7 @@ services:
       retries: 3
     container_name: request-api
     environment:
+      - SERVICE_TYPE=api
       - PYTHONUNBUFFERED=1
       - REQUEST_DB_HOST=postgres
       - REQUEST_DB_PORT=5432
@@ -74,7 +75,6 @@ services:
       - FTP_USE_TLS=${FTP_USE_TLS:-false}
       - SHARED_DATA_DIR=/app/shared_data
       - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS}
-    command: uvicorn main:app --host 0.0.0.0 --port 8000
     ports:
       - "${API_PORT:-8001}:8000"
     volumes:
@@ -97,6 +97,7 @@ services:
       dockerfile: Dockerfile
     container_name: request-celery-worker
     environment:
+      - SERVICE_TYPE=celery-worker
       - PYTHONUNBUFFERED=1
       - REQUEST_DB_HOST=postgres
       - REQUEST_DB_PORT=5432
@@ -134,6 +135,7 @@ services:
       dockerfile: Dockerfile
     container_name: request-celery-beat
     environment:
+      - SERVICE_TYPE=celery-beat
       - PYTHONUNBUFFERED=1
       - REQUEST_DB_HOST=postgres
       - REQUEST_DB_PORT=5432
@@ -171,6 +173,7 @@ services:
       dockerfile: Dockerfile
     container_name: request-flower
     environment:
+      - SERVICE_TYPE=flower
       - PYTHONUNBUFFERED=1
       - REQUEST_DB_HOST=postgres
       - REQUEST_DB_PORT=5432

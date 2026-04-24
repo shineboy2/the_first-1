@@ -7,6 +7,8 @@ RUN apt-get update && apt-get install -y \
     gcc \
     libpq-dev \
     curl \
+    postgresql-client \
+    bash \
     && rm -rf /var/lib/apt/lists/*
 
 # Install python dependencies
@@ -16,7 +18,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY api /app
 
+# Copy entrypoint script
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # Setup directories for exports/imports
 RUN mkdir -p /app/exports /app/imports /app/shared_data
 
 EXPOSE 8000
+
+# Use entrypoint script for initialization before starting the app
+ENTRYPOINT ["/app/entrypoint.sh"]

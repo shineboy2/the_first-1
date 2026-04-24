@@ -105,7 +105,7 @@ class ExportStorageService:
         """Save to FTP using dynamic config."""
         ftp_settings = {
             "host": config.get("host"),
-            "port": config.get("port", 21),
+            "port": config.get("port") or 21,  # Handle None values
             "username": config.get("user"),
             "password": config.get("password"),
             "base_path": config.get("path", "/"),

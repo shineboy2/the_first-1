@@ -130,11 +130,12 @@ def import_users_from_response_network(self):
                     existing_user.profile_type = user_data.get("profile_type", "user")
                     existing_user.allowed_request_types = user_data.get("allowed_request_types", [])
                     existing_user.blocked_request_types = user_data.get("blocked_request_types", [])
-                    existing_user.rate_limit_per_minute = user_data.get("rate_limit_per_minute", 200)
-                    existing_user.rate_limit_per_hour = user_data.get("rate_limit_per_hour", 1000)
-                    existing_user.rate_limit_per_day = user_data.get("rate_limit_per_day", 5000)
-                    existing_user.daily_request_limit = user_data.get("daily_request_limit", 1000)
-                    existing_user.monthly_request_limit = user_data.get("monthly_request_limit", 10000)
+                    existing_user.allowed_external_apis = user_data.get("allowed_external_apis", [])
+                    existing_user.rate_limit_per_minute = user_data.get("rate_limit_per_minute", 10)
+                    existing_user.rate_limit_per_hour = user_data.get("rate_limit_per_hour", 100)
+                    existing_user.rate_limit_per_day = user_data.get("rate_limit_per_day", 500)
+                    existing_user.daily_request_limit = user_data.get("daily_request_limit", 100)
+                    existing_user.monthly_request_limit = user_data.get("monthly_request_limit", 2000)
                     existing_user.priority = user_data.get("priority", 5)
                     updated_count += 1
                 else:
@@ -149,11 +150,12 @@ def import_users_from_response_network(self):
                         profile_type=user_data.get("profile_type", "user"),
                         allowed_request_types=user_data.get("allowed_request_types", []),
                         blocked_request_types=user_data.get("blocked_request_types", []),
-                        rate_limit_per_minute=user_data.get("rate_limit_per_minute", 200),
-                        rate_limit_per_hour=user_data.get("rate_limit_per_hour", 1000),
-                        rate_limit_per_day=user_data.get("rate_limit_per_day", 5000),
-                        daily_request_limit=user_data.get("daily_request_limit", 1000),
-                        monthly_request_limit=user_data.get("monthly_request_limit", 10000),
+                        allowed_external_apis=user_data.get("allowed_external_apis", []),
+                        rate_limit_per_minute=user_data.get("rate_limit_per_minute", 10),
+                        rate_limit_per_hour=user_data.get("rate_limit_per_hour", 100),
+                        rate_limit_per_day=user_data.get("rate_limit_per_day", 500),
+                        daily_request_limit=user_data.get("daily_request_limit", 100),
+                        monthly_request_limit=user_data.get("monthly_request_limit", 2000),
                         priority=user_data.get("priority", 5)
                     )
                     db.add(new_user)

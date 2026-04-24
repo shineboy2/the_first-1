@@ -260,7 +260,7 @@ async def test_storage_config(
         import ftplib
         try:
             ftp = ftplib.FTP()
-            ftp.connect(config["ftp_host"], config.get("ftp_port", 21))
+            ftp.connect(config["ftp_host"], config.get("ftp_port") or 21)
             ftp.login(config["ftp_user"], config["ftp_password"])
             
             # Try to change to directory

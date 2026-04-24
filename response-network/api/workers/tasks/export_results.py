@@ -98,7 +98,7 @@ def export_completed_results(self):
             host = export_config.get("ftp_host")
             user = export_config.get("ftp_user")
             passwd = export_config.get("ftp_password")
-            port = export_config.get("ftp_port", 21)
+            port = export_config.get("ftp_port") or 21
             remote_path = export_config.get("ftp_path", "/results")
             use_tls = export_config.get("ftp_use_tls", False)
             

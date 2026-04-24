@@ -35,11 +35,6 @@ const navigation = [
     icon: FileText,
   },
   {
-    name: "تنظیمات Elasticsearch",
-    href: "/dashboard/elasticsearch-configs",
-    icon: Database,
-  },
-  {
     name: "تنظیمات همگام‌سازی",
     href: "/dashboard/settings",
     icon: FileText,

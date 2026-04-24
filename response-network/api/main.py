@@ -22,6 +22,7 @@ from router import auth_router, request_type_router, worker_settings, profile_ty
 from routers import admin_tasks
 from routers import admin_export_control
 from routers import admin_panel
+from routers import admin_storage_config
 from routers import profile_type_access
 from routers import external_apis
 from routers import elasticsearch_config
@@ -118,6 +119,9 @@ app.include_router(admin_tasks.router, prefix=settings.API_V1_STR, dependencies=
 
 # Admin export control router (DISABLED - replaced by admin_exports)
 # app.include_router(admin_export_control.router, dependencies=[Depends(oauth2_scheme)])
+
+# Admin storage config router (for operation_type based storage configuration)
+app.include_router(admin_storage_config.router, prefix=f"{settings.API_V1_STR}/admin/exports", dependencies=[Depends(oauth2_scheme)])
 
 # Admin panel monitoring router
 app.include_router(admin_panel.router, dependencies=[Depends(oauth2_scheme)])

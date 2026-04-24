@@ -75,16 +75,16 @@ def export_request_types_to_request_network():
                 ],
             })
         
-        # Retrieve dynamic export config (reuse settings_export_config or use own)
+        # Retrieve dynamic export config (use request_types_export_config)
         from models.settings import Settings as SettingsModel
         config_result = session.execute(
-            select(SettingsModel).where(SettingsModel.key == "settings_export_config")
+            select(SettingsModel).where(SettingsModel.key == "request_types_export_config")
         )
         config_setting = config_result.scalar_one_or_none()
         config = config_setting.value if config_setting else {}
         
         if not config.get("enabled", False):
-            logger.info("Request types export is disabled (settings_export_config.enabled=false).")
+            logger.info("Request types export is disabled (request_types_export_config.enabled=false).")
             return {"status": "skipped", "reason": "disabled"}
         
         filename = "latest.json"
@@ -113,9 +113,9 @@ def export_request_types_to_request_network():
             host = config.get("ftp_host")
             user = config.get("ftp_user")
             passwd = config.get("ftp_password")
-            port = config.get("ftp_port", 21)
-            # Use dedicated /settings/request_types path for request types export
-            remote_path = "/settings/request_types"
+            port = config.get("ftp_port") or 21
+            # Use dedicated /request_types path for request types export
+            remote_path = "/request_types"
             use_tls = config.get("ftp_use_tls", False)
             
             if not host:

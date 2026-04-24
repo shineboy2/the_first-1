@@ -21,87 +21,9 @@ from schemas.settings import (
     UserSettingUpdate,
     UserSettingRead
 )
-from workers.tasks.settings_exporter import export_settings_to_request_network
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
-
-# Export endpoint - send task to Celery
-@router.post("/export/now")
-async def export_settings_now(
-    current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db_session)
-):
-    """
-    درخواست اکسپورت تنظیمات.
-    تسک اکسپورت را در صف Celery قرار می‌دهد.
-    """
-    # Send task to Celery queue
-    task = export_settings_to_request_network.delay()
-    
-    return {
-        "message": "درخواست اکسپورت به صف اضافه شد",
-        "task_id": task.id,
-        "status": "pending"
-    }
-
-
-@router.get("/export/status/{task_id}")
-async def get_export_status(
-    task_id: str,
-    current_user: User = Depends(get_current_admin_user)
-):
-    """
-    وضعیت تسک اکسپورت را بررسی کنید.
-    """
-    from celery.result import AsyncResult
-    from workers.celery_app import celery_app
-    
-    task_result = AsyncResult(task_id, app=celery_app)
-    
-    return {
-        "task_id": task_id,
-        "status": task_result.status,
-        "result": task_result.result if task_result.status == "SUCCESS" else None,
-        "error": str(task_result.info) if task_result.status == "FAILURE" else None
-    }
-
-
-@router.get("/export/current", dependencies=[Depends(get_current_admin_user)])
-async def get_current_export_settings(
-    db: AsyncSession = Depends(get_db_session)
-):
-    """
-    نمایش تنظیمات فعلی برای اکسپورت.
-    اکسپورت کننده چه تنظیماتی را ارسال می‌کند؟
-    """
-    # Get all active settings
-    result = await db.execute(
-        select(SettingsModel).where(SettingsModel.is_public == True)
-    )
-    settings_list = result.scalars().all()
-    
-    settings_summary = []
-    for setting in settings_list:
-        settings_summary.append({
-            "key": setting.key,
-            "description": setting.description,
-            "is_public": setting.is_public,
-            "value_keys": list(setting.value.keys()) if isinstance(setting.value, dict) else None,
-            "updated_at": setting.updated_at
-        })
-    
-    return {
-        "total_settings": len(settings_list),
-        "export_timestamp": datetime.utcnow(),
-        "settings": settings_summary,
-        "export_path": "/exports/settings/",
-        "message": "تنظیمات زیر برای اکسپورت ارسال می‌شوند"
-    }
-
-
-# NOTE: export_config and import_config endpoints moved to storage_config_router
-# Use /api/v1/settings/storage/ for all storage configurations
 
 
 @router.post("/system/trigger_export", dependencies=[Depends(get_current_admin_user)])
@@ -135,9 +57,6 @@ async def create_setting(
     db.add(db_setting)
     await db.commit()
     await db.refresh(db_setting)
-    
-    # Trigger settings export task
-    export_settings_to_request_network.delay()
     
     return db_setting
 
@@ -210,9 +129,6 @@ async def update_setting(
     await db.commit()
     await db.refresh(db_setting)
     
-    # Trigger settings export task
-    export_settings_to_request_network.delay()
-    
     return db_setting
 
 
@@ -233,9 +149,6 @@ async def delete_setting(
     
     await db.delete(setting)
     await db.commit()
-    
-    # Trigger settings export task
-    export_settings_to_request_network.delay()
 
 
 # User Settings Endpoints

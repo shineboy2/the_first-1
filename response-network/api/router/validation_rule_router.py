@@ -14,7 +14,6 @@ from schemas.validation_rule import (
     ValidationRuleUpdate,
     ValidationRuleExport
 )
-from workers.tasks.settings_exporter import export_validation_rules_to_request_network
 
 router = APIRouter(prefix="/validation-rules", tags=["validation-rules"])
 
@@ -40,9 +39,6 @@ async def create_validation_rule(
     db.add(db_rule)
     await db.commit()
     await db.refresh(db_rule)
-    
-    # Trigger export task
-    export_validation_rules_to_request_network.delay()
     
     return db_rule
 
@@ -99,9 +95,6 @@ async def update_validation_rule(
     await db.commit()
     await db.refresh(db_rule)
     
-    # Trigger export task
-    export_validation_rules_to_request_network.delay()
-    
     return db_rule
 
 
@@ -129,8 +122,5 @@ async def assign_rule_to_request_type(
 
     db_request_type.validation_rules.append(db_rule)
     await db.commit()
-    
-    # Trigger export task
-    export_validation_rules_to_request_network.delay()
     
     return {"status": "success"}

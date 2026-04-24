@@ -31,8 +31,8 @@ celery_app.autodiscover_tasks(["workers.tasks"], force=True)
 # Import all tasks explicitly to ensure they're registered
 from workers.tasks.import_requests import import_requests_from_request_network
 from workers.tasks.export_results import export_completed_results
-from workers.tasks.settings_exporter import export_settings_to_request_network
 from workers.tasks.request_types_exporter import export_request_types_to_request_network
+from workers.tasks.access_exporter import export_access_to_request_network
 
 from workers.tasks.system_monitoring import system_health_check
 from workers.tasks.execute_query import execute_pending_queries
@@ -55,11 +55,6 @@ celery_app.conf.beat_schedule = {
     "export-results-to-request-network": {
         "task": "workers.tasks.export_results.export_completed_results",
         "schedule": 10.0,  # هر 10 ثانیه
-    },
-    # Export settings to request-network every 60 seconds
-    "export-settings-every-minute": {
-        "task": "workers.tasks.settings_exporter.export_settings_to_request_network",
-        "schedule": 60.0,  # هر 60 ثانیه
     },
     # Export request types to request-network every 60 seconds
     "export-request-types-every-minute": {

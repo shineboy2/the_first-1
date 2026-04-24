@@ -8,8 +8,8 @@ from typing import List, Optional
 class ExportConfigUpdate(BaseModel):
     """Configuration for what data gets exported to Request Network"""
     
-    settings_export_enabled: bool = Field(default=True, description="Export Settings")
-    settings_filter_by_is_public: bool = Field(default=True, description="Only export Settings with is_public=true")
+    request_types_export_enabled: bool = Field(default=True, description="Export Request Types")
+    request_types_filter_by_is_active: bool = Field(default=True, description="Only export Request Types with is_active=true")
     
     users_export_enabled: bool = Field(default=True, description="Export Users")
     users_filter_by_is_active: bool = Field(default=True, description="Only export active users")
@@ -34,8 +34,8 @@ class ExportConfigUpdate(BaseModel):
 class ExportConfigResponse(BaseModel):
     """Response with current export configuration"""
     
-    settings_export_enabled: bool
-    settings_filter_by_is_public: bool
+    request_types_export_enabled: bool
+    request_types_filter_by_is_active: bool
     
     users_export_enabled: bool
     users_filter_by_is_active: bool

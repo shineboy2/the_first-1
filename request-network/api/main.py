@@ -28,6 +28,7 @@ from db.session import get_db_session
 from routers import auth_router, request_router, admin_router, settings_router, admin_imports, api_key_router, request_types_router
 from routers import users as users_router  # Import users router
 from routers import external_request
+from router import monitoring_router
 from shared.logger import get_logger
 from custom_swagger import get_swagger_ui_html
 
@@ -92,9 +93,10 @@ app.include_router(settings_router.router, prefix=settings.API_V1_STR)
 app.include_router(external_request.router, prefix=settings.API_V1_STR)
 app.include_router(api_key_router.router, prefix=settings.API_V1_STR)
 app.include_router(request_types_router.router, prefix=settings.API_V1_STR)
+app.include_router(monitoring_router, prefix=settings.API_V1_STR)
 
 # Admin Imports router
-app.include_router(admin_imports.router, prefix=settings.API_V1_STR, dependencies=[Depends(get_db_session)])
+app.include_router(admin_imports.router, prefix=f"{settings.API_V1_STR}/admin/imports", dependencies=[Depends(get_db_session)])
 
 # Custom Swagger UI endpoint (offline)
 @app.get("/docs", include_in_schema=False)

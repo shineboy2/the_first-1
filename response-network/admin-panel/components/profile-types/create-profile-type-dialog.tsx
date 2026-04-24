@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -36,9 +36,11 @@ const formSchema = z.object({
         .string()
         .min(3, "نام باید حداقل ۳ کاراکتر باشد")
         .regex(/^[a-zA-Z0-9_-]+$/, "نام فقط می‌تواند شامل حروف انگلیسی، اعداد و خط تیره باشد"),
-    description: z.string().optional(),
+    display_name: z.string().min(1, "نام نمایشی الزامی است"),
+    description: z.string().min(1, "توضیحات الزامی است"),
     daily_request_limit: z.coerce.number().min(0, "محدودیت نمی‌تواند منفی باشد"),
     monthly_request_limit: z.coerce.number().min(0, "محدودیت نمی‌تواند منفی باشد"),
+    max_results_per_request: z.coerce.number().min(1, "حداقل ۱ نتیجه"),
     is_active: z.boolean().default(true),
     permissions: z.object({
         allowed_external_apis: z.array(z.string()).default([]),
@@ -61,22 +63,22 @@ export function CreateProfileTypeDialog({
     const [error, setError] = useState<string | null>(null);
     const [externalApis, setExternalApis] = useState<ExternalAPI[]>([]);
 
-    import("react").then((React) => {
-        React.useEffect(() => {
-            if (open) {
-                adminApi.externalApiService.getExternalAPIs().then(setExternalApis).catch(console.error);
-            }
-        }, [open]);
-    });
+    useEffect(() => {
+        if (open) {
+            adminApi.externalApiService.getExternalAPIs().then(setExternalApis).catch(console.error);
+        }
+    }, [open]);
 
     const form = useForm<CreateProfileTypeFormData>({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         resolver: zodResolver(formSchema) as any,
         defaultValues: {
             name: "",
+            display_name: "",
             description: "",
             daily_request_limit: 100,
             monthly_request_limit: 3000,
+            max_results_per_request: 1000,
             is_active: true,
         },
     });
@@ -84,7 +86,7 @@ export function CreateProfileTypeDialog({
     const onSubmit = async (data: CreateProfileTypeFormData) => {
         try {
             setError(null);
-            const payload = { ...data, max_results_per_request: 1000, display_name: data.name };
+            const payload = { ...data };
             await profileTypeService.createProfileType(payload);
             form.reset();
             onSuccess();
@@ -135,12 +137,43 @@ export function CreateProfileTypeDialog({
 
                         <FormField
                             control={form.control}
+                            name="display_name"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>نام نمایشی</FormLabel>
+                                    <FormControl>
+                                        <Input placeholder="مثال: طرح طلایی" {...field} />
+                                    </FormControl>
+                                    <FormDescription>
+                                        نام قابل نمایش برای کاربران
+                                    </FormDescription>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+
+                        <FormField
+                            control={form.control}
                             name="description"
                             render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>توضیحات</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="توضیحات اختیاری..." {...field} />
+                                        <Input placeholder="توضیحات پروفایل..." {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+
+                        <FormField
+                            control={form.control}
+                            name="max_results_per_request"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>حداکثر نتایج در هر درخواست</FormLabel>
+                                    <FormControl>
+                                        <Input type="number" {...field} />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>

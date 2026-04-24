@@ -14,7 +14,7 @@ class FTPStorageHandler(StorageHandler):
         """Initialize FTP storage handler with settings."""
         super().__init__(settings)
         self.host = settings["host"]
-        self.port = settings.get("port", 21)
+        self.port = settings.get("port") or 21  # Handle None values
         self.username = settings.get("username", "anonymous")
         self.password = settings.get("password", "")
         self.base_path = settings.get("base_path", "/")

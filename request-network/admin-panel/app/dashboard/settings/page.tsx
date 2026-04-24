@@ -131,7 +131,6 @@ export default function SettingsPage() {
 
     const typeLabels: Record<string, string> = {
         "user_import": "دریافت کاربران (از شبکه پاسخ)",
-        "settings_import": "دریافت تنظیمات (پروفایل‌ها و انواع ریکوئست)",
         "request_export": "ارسال درخواست‌ها (به شبکه پاسخ)",
         "result_import": "دریافت نتایج (از شبکه پاسخ)",
     };

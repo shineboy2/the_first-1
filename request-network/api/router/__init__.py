@@ -1,0 +1,1 @@
+from router.monitoring_router import router as monitoring_router

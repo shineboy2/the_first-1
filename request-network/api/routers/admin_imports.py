@@ -15,12 +15,12 @@ from models.settings import Settings as SettingsModel
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/admin/imports", tags=["admin-imports"])
+router = APIRouter(tags=["admin-imports"])
 
 # Operation types and their settings keys for Request Network
 OPERATION_TYPES = {
     "user_import": "user_import_config",  # Request Network imports users from Response
-    "settings_import": "settings_import_config",  # Request Network imports settings from Response
+    "request_types_import": "request_types_import_config",  # Request Network imports request types from Response
     "request_export": "request_export_config",  # Request Network exports requests to Response
     "result_import": "result_import_config",  # Request Network imports results from Response
 }
@@ -50,7 +50,7 @@ async def update_storage_config_by_type(
     
     Operation Types:
     - user_import: Import users from Response Network
-    - settings_import: Import settings from Response Network
+    - request_types_import: Import request types from Response Network
     - request_export: Export requests to Response Network
     - result_import: Import results from Response Network
     """

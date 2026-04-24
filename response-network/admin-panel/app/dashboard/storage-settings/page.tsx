@@ -22,7 +22,7 @@ import {
 
 const OPERATION_ICONS: Record<OperationType, typeof Upload> = {
     user_export: Upload,
-    settings_export: Upload,
+    request_types_export: Upload,
     result_export: Upload,
     request_import: Download,
 };
@@ -387,9 +387,9 @@ export default function StorageSettingsPage() {
                                 <Upload className="h-4 w-4" />
                                 خروجی کاربران
                             </TabsTrigger>
-                            <TabsTrigger value="settings_export" className="flex items-center gap-2">
+                            <TabsTrigger value="request_types_export" className="flex items-center gap-2">
                                 <Upload className="h-4 w-4" />
-                                خروجی تنظیمات
+                                خروجی انواع درخواست
                             </TabsTrigger>
                             <TabsTrigger value="result_export" className="flex items-center gap-2">
                                 <Upload className="h-4 w-4" />
@@ -414,16 +414,16 @@ export default function StorageSettingsPage() {
                             />
                         </TabsContent>
 
-                        <TabsContent value="settings_export">
+                        <TabsContent value="request_types_export">
                             <ConfigCard
-                                operationType="settings_export"
-                                config={getConfig('settings_export')}
+                                operationType="request_types_export"
+                                config={getConfig('request_types_export')}
                                 onSave={handleSave}
                                 onTest={handleTest}
                                 onTestConnection={handleTestConnection}
-                                saving={saving === 'settings_export'}
-                                testing={testing === 'settings_export'}
-                                testingConnection={testingConnection === 'settings_export'}
+                                saving={saving === 'request_types_export'}
+                                testing={testing === 'request_types_export'}
+                                testingConnection={testingConnection === 'request_types_export'}
                             />
                         </TabsContent>
 

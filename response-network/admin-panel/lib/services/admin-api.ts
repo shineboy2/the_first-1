@@ -648,7 +648,7 @@ export const adminTasksService = {
 // Storage Config Service (Multiple Operation Types)
 // ============================================================================
 
-export type OperationType = 'user_export' | 'settings_export' | 'result_export' | 'request_import';
+export type OperationType = 'user_export' | 'request_types_export' | 'result_export' | 'request_import';
 
 export interface StorageConfig {
   operation_type: OperationType;
@@ -671,9 +671,9 @@ export const OPERATION_LABELS: Record<OperationType, { title: string; descriptio
     title: "خروجی کاربران",
     description: "ارسال کاربران به Request Network"
   },
-  settings_export: {
-    title: "خروجی تنظیمات",
-    description: "ارسال تنظیمات به Request Network"
+  request_types_export: {
+    title: "خروجی انواع درخواست",
+    description: "ارسال انواع درخواست به Request Network"
   },
   result_export: {
     title: "خروجی نتایج",

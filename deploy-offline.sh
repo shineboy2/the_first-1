@@ -1,7 +1,12 @@
 #!/bin/bash
 
 # =========================================================================
-# Standard Deployment Script for Request & Response Networks
+# Offline Deployment Script for Request & Response Networks
+# =========================================================================
+# This script is optimized for low bandwidth connections.
+# USE ONLY if Docker images are already cached on the remote server!
+# 
+# First time setup: Run regular deploy.sh once, then use this for future deployments.
 # =========================================================================
 
 RESPONSE_HOST="192.168.214.141"
@@ -21,14 +26,14 @@ deploy_network() {
     local TARGET_DIR="~/${NETWORK}"
     
     echo -e "\n================================================="
-    echo "🚀 Deploying $NETWORK to $HOST..."
+    echo "🚀 Deploying $NETWORK to $HOST (OFFLINE MODE)"
+    echo "⚠️  No image pulls - using cached images only"
     echo "================================================="
     
     # 1. Create target directory on remote server if it doesn't exist
     sshpass -p "$PASS" ssh -o "StrictHostKeyChecking=no" ${USER}@${HOST} "mkdir -p ${TARGET_DIR}"
 
-    # 2. Sync files securely via rsync
-    # We EXCLUDE .env so we don't accidentally overwrite the production environment variables!
+    # 2. Sync files securely via rsync (minimal data transfer)
     echo "🔄 Syncing files via rsync..."
     sshpass -p "$PASS" rsync -avz --delete \
         --exclude="node_modules" \
@@ -45,17 +50,16 @@ deploy_network() {
         --exclude="*.pyc" \
         ./${NETWORK}/ ${USER}@${HOST}:${TARGET_DIR}/
 
-    # 3. Reload Docker Containers with sudo
-    # We use 'ssh -t' to allocate a pseudo-tty which sudo sometimes requires, 
-    # and 'sudo -S' to pass the password securely via echo pipe.
+    # 3. Reload Docker Containers with sudo (NO IMAGE PULLS)
     if [ "$RESET_DB" == "true" ]; then
         echo "🗑️ Cleaning Docker volumes for database reset..."
         sshpass -p "$PASS" ssh -o "StrictHostKeyChecking=no" -t ${USER}@${HOST} \
             "cd ${TARGET_DIR} && echo '$PASS' | sudo -S docker compose -p ${NETWORK} down -v"
     fi
-    echo "🐳 Rebuilding and restarting Docker containers..."
+    
+    echo "🐳 Restarting Docker containers (offline mode - no image pulls)..."
     sshpass -p "$PASS" ssh -o "StrictHostKeyChecking=no" -t ${USER}@${HOST} \
-        "cd ${TARGET_DIR} && echo '$PASS' | sudo -S docker compose -p ${NETWORK} up --build -d"
+        "cd ${TARGET_DIR} && echo '$PASS' | sudo -S COMPOSE_PULL_POLICY=never docker compose -p ${NETWORK} up --build -d --remove-orphans"
         
     # 4. Optional Initialization (for fresh deployments)
     if [ "$INIT_DB" == "true" ]; then
@@ -73,13 +77,11 @@ deploy_network() {
                 "cd ${TARGET_DIR} && echo '$PASS' | sudo -S docker exec response-api python manage.py migrate"
             sshpass -p "$PASS" ssh -o "StrictHostKeyChecking=no" -t ${USER}@${HOST} \
                 "cd ${TARGET_DIR} && echo '$PASS' | sudo -S docker exec response-api python create_admin.py"
-            # Optional: Add setup_initial_config.py call here if FTP details are known, but
-            # usually setting it via Admin Panel once is sufficient if admin can login.
         fi
         echo "✅ Setup scripts completed."
     fi
 
-    echo "✅ Deployment of $NETWORK completed successfully!"
+    echo "✅ Offline deployment of $NETWORK completed successfully!"
 }
 
 # Input validation
@@ -105,6 +107,13 @@ elif [ "$TARGET_NET" == "all" ]; then
     deploy_network "response-network" "$RESPONSE_HOST" "$RESPONSE_USER" "$RESPONSE_PASS"
     deploy_network "request-network" "$REQUEST_HOST" "$REQUEST_USER" "$REQUEST_PASS"
 else
-    echo "Usage: ./deploy.sh [response | request | all] [--init] [--reset-db]"
-    echo "Example: ./deploy.sh all --init --reset-db"
+    echo "Usage: ./deploy-offline.sh [response | request | all] [--init] [--reset-db]"
+    echo ""
+    echo "⚠️  IMPORTANT: This script requires Docker images to be already cached!"
+    echo ""
+    echo "First time setup:"
+    echo "  1. ./deploy.sh response  (with internet connection)"
+    echo "  2. ./deploy-offline.sh response  (for future deployments)"
+    echo ""
+    echo "Example: ./deploy-offline.sh all --reset-db"
 fi

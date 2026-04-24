@@ -79,19 +79,12 @@ def export_users_to_request_network():
         users = result.scalars().all()
         logger.info(f"Found {len(users)} active users to export.")
 
-        # Pre-fetch permissions mapping
-        perm_result = session.execute(
-            select(ProfileTypeRequestAccess, RequestType)
-            .join(RequestType, ProfileTypeRequestAccess.request_type_id == RequestType.id)
-            .where(ProfileTypeRequestAccess.is_active == True)
+        # Pre-fetch profile type configs with permissions
+        profile_result = session.execute(
+            select(ProfileTypeConfig)
         )
+        profile_configs = {pt.name: pt for pt in profile_result.scalars().all()}
         
-        profile_permissions = {}
-        for access, req_type in perm_result:
-            if access.profile_type_id not in profile_permissions:
-                profile_permissions[access.profile_type_id] = []
-            profile_permissions[access.profile_type_id].append(req_type.name)
-            
         # Prepare export data
         export_data = {
             "users": [
@@ -103,13 +96,14 @@ def export_users_to_request_network():
                     "full_name": user.full_name if hasattr(user, 'full_name') else None,
                     "profile_type": user.profile_type or "user",
                     "is_active": user.is_active,
-                    "allowed_request_types": profile_permissions.get(user.profile_type, []),
-                    "blocked_request_types": [],
-                    "rate_limit_per_minute": 200,
-                    "rate_limit_per_hour": 1000,
-                    "rate_limit_per_day": 5000,
-                    "daily_request_limit": getattr(user, 'daily_request_limit', 1000),
-                    "monthly_request_limit": getattr(user, 'monthly_request_limit', 10000),
+                    "allowed_request_types": profile_configs.get(user.profile_type, ProfileTypeConfig()).permissions.get("allowed_request_types", []) if user.profile_type in profile_configs else [],
+                    "blocked_request_types": profile_configs.get(user.profile_type, ProfileTypeConfig()).permissions.get("blocked_request_types", []) if user.profile_type in profile_configs else [],
+                    "allowed_external_apis": profile_configs.get(user.profile_type, ProfileTypeConfig()).permissions.get("allowed_external_apis", []) if user.profile_type in profile_configs else [],
+                    "rate_limit_per_minute": profile_configs.get(user.profile_type).rate_limit_per_minute if user.profile_type in profile_configs else 10,
+                    "rate_limit_per_hour": 100,
+                    "rate_limit_per_day": 500,
+                    "daily_request_limit": profile_configs.get(user.profile_type).daily_request_limit if user.profile_type in profile_configs else 100,
+                    "monthly_request_limit": profile_configs.get(user.profile_type).monthly_request_limit if user.profile_type in profile_configs else 2000,
                     "priority": 5,
                     "created_at": user.created_at.isoformat() if user.created_at else None,
                     "updated_at": user.updated_at.isoformat() if user.updated_at else None
@@ -137,7 +131,7 @@ def export_users_to_request_network():
             host = config.get("ftp_host")
             user = config.get("ftp_user")
             passwd = config.get("ftp_password")
-            port = config.get("ftp_port", 21)
+            port = config.get("ftp_port") or 21
             # Use dedicated /users path for users export
             base_ftp_path = config.get("ftp_path", "/uploads")
             remote_path = "/users"  # Fixed path for user exports

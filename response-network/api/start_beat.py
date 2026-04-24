@@ -27,7 +27,10 @@ def start_beat():
     print(f"{'='*60}")
     print(f"Command: {' '.join(cmd)}\n")
     print("📋 Scheduled Tasks:")
-    print("   - export_settings_to_request_network (every 60 seconds)\n")
+    print("   - export_users_to_request_network (every 5 minutes)")
+    print("   - import_requests_from_request_network (every 10 seconds)")
+    print("   - export_completed_results (every 10 seconds)")
+    print("   - export_request_types_to_request_network (every 60 seconds)\n")
     
     # Start beat
     subprocess.run(cmd)

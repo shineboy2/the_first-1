@@ -26,8 +26,8 @@ async def get_export_config(
     from core.config import settings as app_settings
     
     return ExportConfigResponse(
-        settings_export_enabled=True,
-        settings_filter_by_is_public=True,
+        request_types_export_enabled=True,
+        request_types_filter_by_is_active=True,
         users_export_enabled=True,
         users_filter_by_is_active=True,
         users_include_roles=["admin", "user"],
@@ -56,8 +56,8 @@ async def update_export_config(
     Update export configuration.
     
     **Parameters:**
-    - `settings_export_enabled`: Whether to export Settings
-    - `settings_filter_by_is_public`: Only export Settings with is_public=true
+    - `request_types_export_enabled`: Whether to export Request Types
+    - `request_types_filter_by_is_active`: Only export Request Types with is_active=true
     - `users_export_enabled`: Whether to export Users
     - `users_filter_by_is_active`: Only export active users
     - `users_include_roles`: Which roles to export (admin, user, etc.)
@@ -68,8 +68,8 @@ async def update_export_config(
     **Example:**
     ```json
     {
-        "settings_export_enabled": true,
-        "settings_filter_by_is_public": true,
+        "request_types_export_enabled": true,
+        "request_types_filter_by_is_active": true,
         "users_export_enabled": true,
         "users_filter_by_is_active": true,
         "users_include_roles": ["admin", "user"],
@@ -85,8 +85,8 @@ async def update_export_config(
     # In future, we could store them in database for runtime updates
     
     return ExportConfigResponse(
-        settings_export_enabled=config.settings_export_enabled,
-        settings_filter_by_is_public=config.settings_filter_by_is_public,
+        request_types_export_enabled=config.request_types_export_enabled,
+        request_types_filter_by_is_active=config.request_types_filter_by_is_active,
         users_export_enabled=config.users_export_enabled,
         users_filter_by_is_active=config.users_filter_by_is_active,
         users_include_roles=config.users_include_roles,
@@ -116,7 +116,6 @@ async def test_exports(
     This will run all export tasks right now instead of waiting for the next scheduled cycle.
     """
     from celery import group
-    from workers.tasks.settings_exporter import export_settings_to_request_network
     from workers.tasks.users_exporter import export_users_to_request_network
     from workers.tasks.profile_types_exporter import export_profile_types_to_request_network
     from workers.tasks.export_results import export_completed_results
@@ -124,7 +123,6 @@ async def test_exports(
     try:
         # Run all export tasks immediately
         job = group(
-            export_settings_to_request_network.s(),
             export_users_to_request_network.s(),
             export_profile_types_to_request_network.s(),
             export_completed_results.s()
@@ -136,7 +134,6 @@ async def test_exports(
             "message": "All export tasks have been queued for immediate execution",
             "task_id": result.id,
             "tasks": {
-                "settings": "export_settings_to_request_network",
                 "users": "export_users_to_request_network",
                 "profile_types": "export_profile_types_to_request_network",
                 "results": "export_completed_results"

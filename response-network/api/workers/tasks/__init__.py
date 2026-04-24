@@ -1,6 +1,5 @@
 """Celery tasks for Response Network."""
 
-from .settings_exporter import export_settings_to_request_network
 from .users_exporter import export_users_to_request_network
 from .profile_types_exporter import export_profile_types_to_request_network
 from .password_sync import sync_password_to_request_network

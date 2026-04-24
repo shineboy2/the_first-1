@@ -17,7 +17,6 @@ router = APIRouter(prefix="/admin/exports", tags=["admin-exports"])
 # Operation types and their settings keys
 OPERATION_TYPES = {
     "user_export": "export_config",  # Response Network exports users
-    "settings_export": "settings_export_config",  # Response Network exports settings
     "result_export": "result_export_config",  # Response Network exports results
     "request_import": "request_import_config",  # Response Network imports requests
 }
@@ -228,9 +227,6 @@ async def test_operation(
     elif operation_type == "request_import":
         from workers.tasks.import_requests import import_requests_from_request_network
         task = import_requests_from_request_network.delay()
-    elif operation_type == "settings_export":
-        from workers.tasks.settings_exporter import export_settings_to_request_network
-        task = export_settings_to_request_network.delay()
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -276,7 +272,7 @@ async def test_ftp_connection(
         import ftplib
         try:
             ftp_host = config.get("ftp_host")
-            ftp_port = config.get("ftp_port", 21)
+            ftp_port = config.get("ftp_port") or 21
             ftp_user = config.get("ftp_user")
             ftp_password = config.get("ftp_password")
             ftp_path = config.get("ftp_path", "/")
