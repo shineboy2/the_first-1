@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, computed_field
 
 from .response import ResponsePublic
 
@@ -47,3 +47,28 @@ class RequestPublic(BaseModel):
     result_received_at: datetime | None = None
     error_message: str | None = None
     response: ResponsePublic | None = None
+
+    @computed_field  # type: ignore
+    @property
+    def effective_status(self) -> str:
+        """
+        Compute effective status considering response has_error.
+        - pending: request created but not yet exported
+        - processing: exported but not yet completed
+        - completed_success: response received without errors
+        - completed_error: response received but contains errors
+        - failed: processing failed at some stage
+        """
+        if self.status.lower() == "failed":
+            return "failed"
+        
+        if self.status.lower() == "completed" and self.response:
+            if self.response.has_error:
+                return "completed_error"
+            else:
+                return "completed_success"
+        
+        if self.status.lower() == "exported":
+            return "processing"
+        
+        return self.status.lower()

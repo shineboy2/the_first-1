@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Integer, DateTime, Column, Text
+from sqlalchemy import String, Integer, DateTime, Column, Text, Boolean
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 
@@ -27,6 +27,7 @@ class IncomingRequest(BaseModel, TimestampMixin):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    has_error: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     meta: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     result = relationship("QueryResult", back_populates="request", uselist=False, cascade="all, delete-orphan", lazy="joined")

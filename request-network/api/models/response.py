@@ -21,6 +21,8 @@ class Response(UUIDMixin, BaseModel):
     import_batch_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     is_cached: Mapped[bool] = mapped_column(Boolean, default=False)
     cache_key: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    has_error: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
     meta: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     # Relationship back to the request

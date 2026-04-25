@@ -29,8 +29,8 @@ services:
     container_name: airline_kibana
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-      - ELASTICSEARCH_USERNAME=kibana_system
-      - ELASTICSEARCH_PASSWORD=KibanaPass123!
+      - ELASTICSEARCH_USERNAME=elastic
+      - ELASTICSEARCH_PASSWORD=ElasticPass123!
       - xpack.security.enabled=true
     ports:
       - "5601:5601"

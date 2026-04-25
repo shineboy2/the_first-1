@@ -90,12 +90,17 @@ def import_results_from_response_network(self):
 
                         # Create Response object
                         response_data = result_data.get("result_data", {})
+                        has_error = "error" in response_data
+                        error_message = response_data.get("error") if has_error else None
+                        
                         response_obj = Response(
                             request_id=request.id,
                             result_data=response_data,
                             result_count=response_data.get("count", 0),
                             execution_time_ms=result_data.get("took", 0),
-                            received_at=datetime.utcnow()
+                            received_at=datetime.utcnow(),
+                            has_error=has_error,
+                            error_message=error_message
                         )
                         db.add(response_obj)
 

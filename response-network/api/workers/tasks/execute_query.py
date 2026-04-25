@@ -3,6 +3,7 @@ from datetime import datetime
 import uuid
 from time import sleep
 import base64
+import logging
 
 from celery import shared_task
 from sqlalchemy import create_engine, select
@@ -14,6 +15,9 @@ from models.request_type import RequestType
 from models.query_result import QueryResult
 from models.elasticsearch_config import ElasticsearchConfig
 from services.external_api_handler import ExternalAPIHandler
+
+# Setup logging
+logger = logging.getLogger(__name__)
 
 # Setup sync database connection for Celery
 sync_engine = create_engine(
@@ -39,6 +43,7 @@ def execute_pending_queries(self):
 
         processed_count = 0
         for req in pending_requests:
+            req_id = req.id  # Store ID separately to avoid state issues
             try:
                 # Update status to processing
                 req.status = "processing"
@@ -151,9 +156,12 @@ def execute_pending_queries(self):
                         ElasticsearchConfig.is_active == True
                     ).first()
                     es_config = es_config_result
+                    if es_config:
+                        logger.info(f"[ELASTICSEARCH] Loaded config from database: {es_config.url} (user: {es_config.username})")
+                    else:
+                        logger.warning(f"[ELASTICSEARCH] No active config found in database, using settings: {settings.ELASTICSEARCH_URL}")
                 except Exception as e:
-                    import logging
-                    logging.warning(f"Failed to load Elasticsearch config from database: {e}")
+                    logger.error(f"[ELASTICSEARCH] Failed to load config from database: {e}", exc_info=True)
                 
                 # Use runtime config if available, otherwise fall back to settings
                 if es_config:
@@ -223,28 +231,47 @@ def execute_pending_queries(self):
                 processed_count += 1
                 
             except Exception as e:
+                logger.error(f"[EXECUTE_QUERY] Error processing request {req_id}: {str(e)}", exc_info=True)
                 db.rollback()
                 
-                # Create QueryResult with error so it gets exported to Request Network
-                error_result = QueryResult(
-                    id=uuid.uuid4(),
-                    request_id=req.id,
-                    original_request_id=req.original_request_id,
-                    result_data={"error": str(e)},
-                    result_count=0,
-                    execution_time_ms=0,
-                    elasticsearch_took_ms=0,
-                    cache_hit=False,
-                    executed_at=datetime.utcnow()
-                )
-                db.add(error_result)
-                
-                req.status = "failed"
-                req.error_message = str(e)
-                req.retry_count += 1
-                req.completed_at = datetime.utcnow()
-                db.commit()
-                processed_count += 1
+                # Fetch fresh copy of request from database after rollback
+                fresh_req = db.query(IncomingRequest).filter(IncomingRequest.id == req_id).first()
+                if fresh_req:
+                    # Create QueryResult with error
+                    error_result = QueryResult(
+                        id=uuid.uuid4(),
+                        request_id=fresh_req.id,
+                        original_request_id=fresh_req.original_request_id,
+                        result_data={"error": str(e)},
+                        result_count=0,
+                        execution_time_ms=0,
+                        elasticsearch_took_ms=0,
+                        cache_hit=False,
+                        executed_at=datetime.utcnow()
+                    )
+                    db.add(error_result)
+                    
+                    # Increment retry count
+                    fresh_req.retry_count += 1
+                    fresh_req.error_message = str(e)
+                    fresh_req.completed_at = datetime.utcnow()
+                    
+                    # Check if we should auto-retry or mark as failed
+                    max_retries = 3  # Same as Celery max_retries
+                    if fresh_req.retry_count < max_retries:
+                        # Auto-retry: set status back to pending
+                        fresh_req.status = "pending"
+                        fresh_req.completed_at = None  # Reset completion time
+                        logger.info(f"[EXECUTE_QUERY] Request {req_id} will be retried (attempt {fresh_req.retry_count}/{max_retries})")
+                    else:
+                        # Max retries exceeded: mark as failed
+                        fresh_req.status = "failed"
+                        logger.error(f"[EXECUTE_QUERY] Request {req_id} exceeded max retries ({max_retries}), marked as failed")
+                    
+                    db.commit()
+                    processed_count += 1
+                else:
+                    logger.error(f"[EXECUTE_QUERY] Could not fetch request {req_id} after rollback")
                 # Continue to next request
 
         return {

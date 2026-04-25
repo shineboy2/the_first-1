@@ -13,6 +13,8 @@ class ResponsePublic(BaseModel):
     request_id: uuid.UUID
     result_count: int | None = None
     received_at: datetime
+    has_error: bool = False
+    error_message: str | None = None
 
 
 class ResponseDetailed(ResponsePublic):
@@ -21,3 +23,5 @@ class ResponseDetailed(ResponsePublic):
     Used by GET /requests/{id}/response endpoint.
     """
     result_data: dict | None = None
+    is_cached: bool = False
+    cache_key: str | None = None

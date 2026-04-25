@@ -1,4 +1,4 @@
-from pydantic import BaseModel, conint
+from pydantic import BaseModel, conint, computed_field
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 from uuid import UUID
@@ -41,11 +41,11 @@ class Request(BaseModel):
     status: str
     query_type: Optional[str] = None
     query_params: Optional[Dict] = None
-    query_params: Optional[Dict] = None
     content: Optional[Dict] = None
     result: Optional[Dict] = None
     error: Optional[str] = None
     error_message: Optional[str] = None
+    has_error: bool = False
 
     processing_time: Optional[float] = None # IncomingRequest doesn't have it directly?
     progress: float = 0.0 # IncomingRequest doesn't have progress?
@@ -57,11 +57,38 @@ class Request(BaseModel):
         orm_mode = True # For Pydantic v1
         arbitrary_types_allowed = True
 
+    @computed_field  # type: ignore
+    @property
+    def effective_status(self) -> str:
+        """
+        Compute effective status considering has_error and error_message.
+        - pending: request waiting to be processed
+        - processing: request being executed
+        - completed_success: response received without errors
+        - completed_error: response received but contains errors
+        - failed: processing failed at some stage
+        """
+        if self.status.lower() == "failed":
+            return "failed"
+        
+        if self.status.lower() == "completed":
+            if self.has_error or self.error_message:
+                return "completed_error"
+            else:
+                return "completed_success"
+        
+        if self.status.lower() == "processing":
+            return "processing"
+        
+        return self.status.lower()
+
 class RequestStats(BaseModel):
     total: int
     pending: int
     processing: int
     completed: int
+    completed_success: int
+    completed_error: int
     failed: int
     avg_processing_time: float
 

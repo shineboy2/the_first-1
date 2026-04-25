@@ -118,7 +118,7 @@ export default function RequestsPage() {
       const data = await requestService.getRecentRequests();
       setState((prev) => ({
         ...prev,
-        requests: Array.isArray(data) ? data : (data.requests || []),
+        requests: Array.isArray(data) ? data : [],
         loading: false,
       }));
     } catch {
@@ -131,31 +131,24 @@ export default function RequestsPage() {
   };
 
   const getStatusBadgeVariant = (status: string) => {
-    switch (status) {
-      case "completed":
-        return "default";
-      case "failed":
-        return "destructive";
-      case "processing":
-        return "secondary";
-      default:
-        return "outline";
-    }
+    const normalized = status.toLowerCase();
+    if (normalized === "completed_success") return "default";
+    if (normalized === "completed_error") return "secondary";
+    if (normalized === "completed") return "default";
+    if (normalized === "failed") return "destructive";
+    if (normalized === "processing") return "secondary";
+    return "outline";
   };
 
   const getStatusLabel = (status: string) => {
-    switch (status) {
-      case "pending":
-        return "در انتظار";
-      case "processing":
-        return "در حال پردازش";
-      case "completed":
-        return "تکمیل‌شده";
-      case "failed":
-        return "ناموفق";
-      default:
-        return status;
-    }
+    const normalized = status.toLowerCase();
+    if (normalized === "completed_success") return "موفق ✓";
+    if (normalized === "completed_error") return "تکمیل شده (خطا)";
+    if (normalized === "completed") return "موفق";
+    if (normalized === "processing") return "درحال پردازش";
+    if (normalized === "failed") return "ناموفق";
+    if (normalized === "pending") return "درانتظار";
+    return status;
   };
 
   // Check auth
@@ -222,7 +215,7 @@ export default function RequestsPage() {
         )}
 
         {/* Stats */}
-        <div className="grid gap-4 md:grid-cols-4 mb-6">
+        <div className="grid gap-4 md:grid-cols-5 mb-6">
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium">کل درخواست‌ها</CardTitle>
@@ -245,11 +238,22 @@ export default function RequestsPage() {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">در حال پردازش</CardTitle>
+              <CardTitle className="text-sm font-medium">موفق</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-blue-600">
-                {state.requests.filter((r) => r.status === "processing").length}
+              <div className="text-3xl font-bold text-green-600">
+                {state.requests.filter((r) => (r as any).effective_status?.toLowerCase?.() === "completed_success" || (r.status === "completed" && !(r as any).has_error)).length}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium">خطا دار</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-orange-600">
+                {state.requests.filter((r) => (r as any).effective_status?.toLowerCase?.() === "completed_error" || ((r as any).has_error && r.status === "completed")).length}
               </div>
             </CardContent>
           </Card>
@@ -350,8 +354,8 @@ export default function RequestsPage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge variant={getStatusBadgeVariant(request.status)}>
-                              {getStatusLabel(request.status)}
+                            <Badge variant={getStatusBadgeVariant((request as any).effective_status || request.status)}>
+                              {getStatusLabel((request as any).effective_status || request.status)}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-sm text-gray-600 dark:text-gray-400">

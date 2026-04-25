@@ -83,29 +83,37 @@ export default function RequestsPage() {
     };
 
     const getStatusIcon = (status: string) => {
-        switch (status.toLowerCase()) {
-            case "completed":
-            case "success":
-                return <CheckCircle2 className="h-4 w-4 text-green-500 mr-1" />;
-            case "failed":
-                return <XCircle className="h-4 w-4 text-red-500 mr-1" />;
-            case "pending":
-            case "processing":
-            default:
-                return <Clock className="h-4 w-4 text-amber-500 mr-1" />;
+        const normalized = status.toLowerCase();
+        if (normalized === "completed_success" || normalized === "completed" || normalized === "success") {
+            return <CheckCircle2 className="h-4 w-4 text-green-500 mr-1" />;
         }
+        if (normalized === "completed_error") {
+            return <AlertCircle className="h-4 w-4 text-orange-500 mr-1" />;
+        }
+        if (normalized === "failed") {
+            return <XCircle className="h-4 w-4 text-red-500 mr-1" />;
+        }
+        return <Clock className="h-4 w-4 text-amber-500 mr-1" />;
     };
 
     const getStatusBadge = (status: string) => {
-        switch (status.toLowerCase()) {
-            case "completed":
-                return <Badge variant="default" className="bg-green-100 text-green-800 hover:bg-green-100 border-green-200">موفق</Badge>;
-            case "failed":
-                return <Badge variant="destructive" className="bg-red-100 text-red-800 hover:bg-red-100 border-red-200">خطا</Badge>;
-            case "pending":
-            default:
-                return <Badge variant="secondary" className="bg-amber-100 text-amber-800 hover:bg-amber-100 border-amber-200">در حال انجام</Badge>;
+        const normalized = status.toLowerCase();
+        if (normalized === "completed_success") {
+            return <Badge className="bg-green-100 text-green-800 hover:bg-green-100 border-green-200">موفق ✓</Badge>;
         }
+        if (normalized === "completed_error") {
+            return <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100 border-orange-200">تکمیل شده (خطا)</Badge>;
+        }
+        if (normalized === "completed") {
+            return <Badge className="bg-green-100 text-green-800 hover:bg-green-100 border-green-200">موفق</Badge>;
+        }
+        if (normalized === "failed") {
+            return <Badge variant="destructive" className="bg-red-100 text-red-800 hover:bg-red-100 border-red-200">خطا</Badge>;
+        }
+        if (normalized === "processing") {
+            return <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-100 border-blue-200">درحال پردازش</Badge>;
+        }
+        return <Badge variant="secondary" className="bg-amber-100 text-amber-800 hover:bg-amber-100 border-amber-200">درانتظار</Badge>;
     };
 
     const filteredRequests = state.requests.filter(
@@ -189,7 +197,7 @@ export default function RequestsPage() {
                         </CardHeader>
                         <CardContent>
                             <div className="text-3xl font-bold text-green-600">
-                                {state.requests.filter((r) => r.status.toLowerCase() === "completed").length}
+                                {state.requests.filter((r) => (r as any).effective_status?.toLowerCase?.() === "completed_success" || r.status.toLowerCase() === "completed").length}
                             </div>
                         </CardContent>
                     </Card>
@@ -269,7 +277,7 @@ export default function RequestsPage() {
                                                         </Badge>
                                                     </TableCell>
                                                     <TableCell className="text-center flex items-center justify-center">
-                                                        {getStatusBadge(req.status)}
+                                                        {getStatusBadge((req as any).effective_status || req.status)}
                                                     </TableCell>
                                                     <TableCell className="text-center" dir="ltr">
                                                         <span className="text-sm text-muted-foreground whitespace-nowrap">
