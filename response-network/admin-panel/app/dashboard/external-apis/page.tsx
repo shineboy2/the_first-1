@@ -11,6 +11,7 @@ import {
     Trash2,
     RefreshCw,
     AlertCircle,
+    Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +39,7 @@ import { Loader2 } from "lucide-react";
 import adminApi, { ExternalAPI } from "@/lib/services/admin-api";
 import { CreateExternalAPIDialog } from "@/components/external-apis/create-external-api-dialog";
 import { EditExternalAPIDialog } from "@/components/external-apis/edit-external-api-dialog";
+import { ManageAccessDialog } from "@/components/external-apis/manage-access-dialog";
 
 export default function ExternalAPIsPage() {
     const router = useRouter();
@@ -50,6 +52,7 @@ export default function ExternalAPIsPage() {
     // Dialog states
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [editDialogOpen, setEditDialogOpen] = useState(false);
+    const [manageAccessDialogOpen, setManageAccessDialogOpen] = useState(false);
     const [selectedApi, setSelectedApi] = useState<ExternalAPI | null>(null);
 
     useEffect(() => {
@@ -267,6 +270,13 @@ export default function ExternalAPIsPage() {
                                                                     <Edit className="ml-2 h-4 w-4" />
                                                                     ویرایش
                                                                 </DropdownMenuItem>
+                                                                <DropdownMenuItem onClick={() => {
+                                                                    setSelectedApi(api);
+                                                                    setManageAccessDialogOpen(true);
+                                                                }}>
+                                                                    <Users className="ml-2 h-4 w-4" />
+                                                                    مدیریت دسترسی
+                                                                </DropdownMenuItem>
                                                                 <DropdownMenuSeparator />
                                                                 <DropdownMenuItem
                                                                     className="text-red-600 focus:text-red-600"
@@ -309,6 +319,13 @@ export default function ExternalAPIsPage() {
                 onOpenChange={setEditDialogOpen}
                 onSuccess={fetchExternalAPIs}
                 apiConfig={selectedApi}
+            />
+
+            <ManageAccessDialog
+                open={manageAccessDialogOpen}
+                onOpenChange={setManageAccessDialogOpen}
+                onSuccess={fetchExternalAPIs}
+                externalApi={selectedApi}
             />
 
         </div>

@@ -107,7 +107,16 @@ class ExternalAPIHandler:
         if not template:
             return context # Fallback to raw context if no template
 
-        return self._render_node(template, context)
+        # Pre-process context: Add data URI prefix to base64Image if missing
+        processed_context = context.copy()
+        if "base64Image" in processed_context:
+            base64_value = processed_context["base64Image"]
+            if isinstance(base64_value, str) and not base64_value.startswith("data:"):
+                # Add data URI prefix (default to PNG, could be made configurable)
+                processed_context["base64Image"] = f"data:image/png;base64,{base64_value}"
+                logger.info(f"Added data URI prefix to base64Image")
+
+        return self._render_node(template, processed_context)
 
     def _render_node(self, node: Any, context: Dict[str, Any]) -> Any:
         if isinstance(node, dict):

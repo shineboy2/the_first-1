@@ -231,7 +231,7 @@ export default function RequestDetailsPage({ params }: { params: { id: string } 
                         </CardHeader>
                         <CardContent>
                             <pre className="p-4 bg-gray-950 text-green-400 rounded-lg overflow-x-auto text-xs font-mono leading-relaxed border border-gray-800 shadow-inner" dir="ltr">
-                                {JSON.stringify(request.response ? request.response.request_snapshot : "داده‌های ورودی ثبت نشده", null, 2)}
+                                {JSON.stringify(request.query_params || {}, null, 2)}
                             </pre>
                         </CardContent>
                     </Card>
@@ -257,11 +257,13 @@ export default function RequestDetailsPage({ params }: { params: { id: string } 
                             ) : (
                                 <div className="space-y-6">
                                     <div className="flex flex-wrap gap-4 mb-4">
-                                        <Badge variant="outline" className="bg-blue-50 text-blue-800 border-blue-200">
-                                            زمان اجرا: {request.response.execution_time_ms} ms
-                                        </Badge>
+                                        {request.response.execution_time_ms && (
+                                            <Badge variant="outline" className="bg-blue-50 text-blue-800 border-blue-200">
+                                                زمان اجرا: {request.response.execution_time_ms} ms
+                                            </Badge>
+                                        )}
                                         <span className="text-xs text-gray-500 flex items-center">
-                                            دریافت در: {new Date(request.response.created_at).toLocaleString('fa-IR')}
+                                            دریافت در: {new Date(request.response.received_at || request.response.created_at).toLocaleString('fa-IR')}
                                         </span>
                                     </div>
 

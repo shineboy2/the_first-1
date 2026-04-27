@@ -63,9 +63,18 @@ def export_completed_results(self):
         # Prepare export data
         export_list = []
         for res in results:
+            # Get the request to check has_error status
+            request = res.request
+            
+            # Determine if result has error
+            has_error = False
+            if request:
+                has_error = getattr(request, 'has_error', False) or request.status == 'failed'
+            
             export_list.append({
                 "request_id": str(res.original_request_id),  # Map back to original ID for Request Network
-                "status": "completed",
+                "status": request.status if request else "completed",
+                "has_error": has_error,
                 "result_data": res.result_data,
             })
             

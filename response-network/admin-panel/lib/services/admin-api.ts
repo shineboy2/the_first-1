@@ -771,6 +771,32 @@ export const externalApiService = {
   async deleteExternalAPI(id: string): Promise<void> {
     await api.delete(`/api/v1/external-apis/${id}`);
   },
+
+  async getProfileTypeAccess(profileType: string): Promise<{ allowed_external_apis: string[] }> {
+    const response = await api.get(`/api/v1/external-apis/profile-types/${profileType}/access`);
+    return response.data;
+  },
+
+  async updateProfileTypeAccess(profileType: string, allowedApis: string[]): Promise<void> {
+    await api.patch(`/api/v1/external-apis/profile-types/${profileType}/access`, {
+      allowed_external_apis: allowedApis,
+    });
+  },
+
+  async grantUserAccess(apiId: string, userIds: string[]): Promise<void> {
+    await api.post(`/api/v1/external-apis/${apiId}/user-access`, {
+      user_ids: userIds,
+    });
+  },
+
+  async getUserAccess(apiId: string): Promise<any[]> {
+    const response = await api.get(`/api/v1/external-apis/${apiId}/user-access`);
+    return response.data;
+  },
+
+  async revokeUserAccess(apiId: string, userId: string): Promise<void> {
+    await api.delete(`/api/v1/external-apis/${apiId}/user-access/${userId}`);
+  },
 };
 
 // ============================================================================

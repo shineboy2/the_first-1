@@ -12,6 +12,82 @@ REQUEST_HOST="192.168.214.146"
 REQUEST_USER="request"
 REQUEST_PASS="1"
 
+# Elasticsearch deployment (on response server)
+ELASTICSEARCH_HOST="192.168.214.139"
+ELASTICSEARCH_USER="response"
+ELASTICSEARCH_PASS="1"
+
+deploy_elasticsearch() {
+    local HOST=$ELASTICSEARCH_HOST
+    local USER=$ELASTICSEARCH_USER
+    local PASS=$ELASTICSEARCH_PASS
+    local TARGET_DIR="~/elasticsearch"
+    
+    echo -e "\n================================================="
+    echo "🔍 Deploying Elasticsearch & Kibana to $HOST..."
+    echo "================================================="
+    
+    # 1. Create target directory
+    sshpass -p "$PASS" ssh -o "StrictHostKeyChecking=no" ${USER}@${HOST} "mkdir -p ${TARGET_DIR}"
+    
+    # 2. Copy docker-compose.elasticsearch.yml
+    echo "🔄 Copying Elasticsearch configuration..."
+    sshpass -p "$PASS" scp -o "StrictHostKeyChecking=no" \
+        ./docker-compose.elasticsearch.yml ${USER}@${HOST}:${TARGET_DIR}/docker-compose.yml
+    
+    # 3. Deploy Elasticsearch stack
+    echo "🐳 Starting Elasticsearch and Kibana containers..."
+    sshpass -p "$PASS" ssh -o "StrictHostKeyChecking=no" -t ${USER}@${HOST} \
+        "cd ${TARGET_DIR} && echo '$PASS' | sudo -S docker compose up --build -d"
+    
+    # 4. Wait for Elasticsearch to be ready
+    echo "⏳ Waiting for Elasticsearch to be ready..."
+    local max_attempts=30
+    local attempt=1
+    
+    while [ $attempt -le $max_attempts ]; do
+        echo "Attempt $attempt/$max_attempts: Checking Elasticsearch health..."
+        
+        if sshpass -p "$PASS" ssh -o "StrictHostKeyChecking=no" ${USER}@${HOST} \
+            "curl -s http://localhost:9200/_cluster/health" > /dev/null 2>&1; then
+            echo "✅ Elasticsearch is ready!"
+            break
+        fi
+        
+        if [ $attempt -eq $max_attempts ]; then
+            echo "❌ Elasticsearch failed to start after $max_attempts attempts"
+            return 1
+        fi
+        
+        sleep 5
+        ((attempt++))
+    done
+    
+    # 5. Wait for Kibana to be ready
+    echo "⏳ Waiting for Kibana to be ready..."
+    attempt=1
+    
+    while [ $attempt -le $max_attempts ]; do
+        echo "Attempt $attempt/$max_attempts: Checking Kibana health..."
+        
+        if sshpass -p "$PASS" ssh -o "StrictHostKeyChecking=no" ${USER}@${HOST} \
+            "curl -s http://localhost:5601/api/status" > /dev/null 2>&1; then
+            echo "✅ Kibana is ready!"
+            break
+        fi
+        
+        if [ $attempt -eq $max_attempts ]; then
+            echo "⚠️ Kibana may not be fully ready, but continuing..."
+            break
+        fi
+        
+        sleep 5
+        ((attempt++))
+    done
+    
+    echo "✅ Elasticsearch deployment completed!"
+}
+
 deploy_network() {
     local NETWORK=$1
     local HOST=$2
@@ -98,13 +174,19 @@ if [ "$2" == "--reset-db" ] || [ "$3" == "--reset-db" ]; then
 fi
 
 if [ "$TARGET_NET" == "response" ]; then
+    deploy_elasticsearch
     deploy_network "response-network" "$RESPONSE_HOST" "$RESPONSE_USER" "$RESPONSE_PASS"
 elif [ "$TARGET_NET" == "request" ]; then
     deploy_network "request-network" "$REQUEST_HOST" "$REQUEST_USER" "$REQUEST_PASS"
+elif [ "$TARGET_NET" == "elasticsearch" ]; then
+    deploy_elasticsearch
 elif [ "$TARGET_NET" == "all" ]; then
+    deploy_elasticsearch
     deploy_network "response-network" "$RESPONSE_HOST" "$RESPONSE_USER" "$RESPONSE_PASS"
     deploy_network "request-network" "$REQUEST_HOST" "$REQUEST_USER" "$REQUEST_PASS"
 else
-    echo "Usage: ./deploy.sh [response | request | all] [--init] [--reset-db]"
+    echo "Usage: ./deploy.sh [response | request | elasticsearch | all] [--init] [--reset-db]"
     echo "Example: ./deploy.sh all --init --reset-db"
+    echo "         ./deploy.sh elasticsearch"
+    echo "         ./deploy.sh response"
 fi

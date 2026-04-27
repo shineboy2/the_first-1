@@ -33,6 +33,25 @@ def execute_pending_queries(self):
     """
     db = SessionLocal()
     try:
+        # First, check for stuck "processing" requests and reset them
+        # A request is considered stuck if it's been in "processing" for more than 5 minutes
+        from datetime import timedelta
+        stuck_threshold = datetime.utcnow() - timedelta(minutes=5)
+        
+        stuck_requests = db.query(IncomingRequest).filter(
+            IncomingRequest.status == "processing",
+            IncomingRequest.started_at < stuck_threshold
+        ).all()
+        
+        for stuck_req in stuck_requests:
+            logger.warning(f"[EXECUTE_QUERY] Found stuck request {stuck_req.id} in processing state, resetting to pending")
+            stuck_req.status = "pending"
+            stuck_req.started_at = None
+            stuck_req.assigned_worker = None
+        
+        if stuck_requests:
+            db.commit()
+        
         # Get pending requests
         pending_requests = db.query(IncomingRequest).filter(
             IncomingRequest.status == "pending"
@@ -65,24 +84,36 @@ def execute_pending_queries(self):
                     
                     execution_time = int((end_time - start_time).total_seconds() * 1000)
                     
-                    # Create QueryResult
-                    query_result = QueryResult(
-                        id=uuid.uuid4(),
-                        request_id=req.id,
-                        original_request_id=req.original_request_id,
-                        result_data={"api_response": api_response},
-                        result_count=1,
-                        execution_time_ms=execution_time,
-                        elasticsearch_took_ms=0,
-                        cache_hit=False,
-                        executed_at=end_time
-                    )
-                    db.add(query_result)
+                    # Update or Create QueryResult
+                    existing_result = db.query(QueryResult).filter(QueryResult.request_id == req.id).first()
+                    if existing_result:
+                        # Update existing result
+                        existing_result.result_data = {"api_response": api_response}
+                        existing_result.result_count = 1
+                        existing_result.execution_time_ms = execution_time
+                        existing_result.elasticsearch_took_ms = 0
+                        existing_result.executed_at = end_time
+                        existing_result.cache_hit = False
+                    else:
+                        # Create new QueryResult
+                        query_result = QueryResult(
+                            id=uuid.uuid4(),
+                            request_id=req.id,
+                            original_request_id=req.original_request_id,
+                            result_data={"api_response": api_response},
+                            result_count=1,
+                            execution_time_ms=execution_time,
+                            elasticsearch_took_ms=0,
+                            cache_hit=False,
+                            executed_at=end_time
+                        )
+                        db.add(query_result)
 
                     # Update Request Status
                     req.status = "completed"
                     req.completed_at = end_time
                     req.progress = 100.0
+                    req.has_error = False
                     
                     db.commit()
                     processed_count += 1
@@ -208,24 +239,36 @@ def execute_pending_queries(self):
                     "results": [h["_source"] for h in hits],
                 }
 
-                # Create QueryResult
-                query_result = QueryResult(
-                    id=uuid.uuid4(),
-                    request_id=req.id,
-                    original_request_id=req.original_request_id,
-                    result_data=result_data,
-                    result_count=result_data["count"],
-                    execution_time_ms=es_result.get("took", 0), # Approximate
-                    elasticsearch_took_ms=es_result.get("took", 0),
-                    cache_hit=False,
-                    executed_at=datetime.utcnow()
-                )
-                db.add(query_result)
+                # Update or Create QueryResult
+                existing_result = db.query(QueryResult).filter(QueryResult.request_id == req.id).first()
+                if existing_result:
+                    # Update existing result
+                    existing_result.result_data = result_data
+                    existing_result.result_count = result_data["count"]
+                    existing_result.execution_time_ms = es_result.get("took", 0)
+                    existing_result.elasticsearch_took_ms = es_result.get("took", 0)
+                    existing_result.executed_at = datetime.utcnow()
+                    existing_result.cache_hit = False
+                else:
+                    # Create new QueryResult
+                    query_result = QueryResult(
+                        id=uuid.uuid4(),
+                        request_id=req.id,
+                        original_request_id=req.original_request_id,
+                        result_data=result_data,
+                        result_count=result_data["count"],
+                        execution_time_ms=es_result.get("took", 0),
+                        elasticsearch_took_ms=es_result.get("took", 0),
+                        cache_hit=False,
+                        executed_at=datetime.utcnow()
+                    )
+                    db.add(query_result)
 
                 # Update Request Status
                 req.status = "completed"
                 req.completed_at = datetime.utcnow()
                 req.progress = 100.0
+                req.has_error = False
                 
                 db.commit()
                 processed_count += 1
@@ -237,35 +280,49 @@ def execute_pending_queries(self):
                 # Fetch fresh copy of request from database after rollback
                 fresh_req = db.query(IncomingRequest).filter(IncomingRequest.id == req_id).first()
                 if fresh_req:
-                    # Create QueryResult with error
-                    error_result = QueryResult(
-                        id=uuid.uuid4(),
-                        request_id=fresh_req.id,
-                        original_request_id=fresh_req.original_request_id,
-                        result_data={"error": str(e)},
-                        result_count=0,
-                        execution_time_ms=0,
-                        elasticsearch_took_ms=0,
-                        cache_hit=False,
-                        executed_at=datetime.utcnow()
-                    )
-                    db.add(error_result)
+                    # Try to update existing QueryResult instead of creating a new one
+                    existing_result = db.query(QueryResult).filter(QueryResult.request_id == fresh_req.id).first()
+                    
+                    if existing_result:
+                        # Update existing result with error
+                        existing_result.result_data = {"error": str(e)}
+                        existing_result.result_count = 0
+                        existing_result.execution_time_ms = 0
+                        existing_result.elasticsearch_took_ms = 0
+                        existing_result.executed_at = datetime.utcnow()
+                        logger.info(f"[EXECUTE_QUERY] Updated existing QueryResult for request {req_id}")
+                    else:
+                        # Create new QueryResult with error
+                        error_result = QueryResult(
+                            id=uuid.uuid4(),
+                            request_id=fresh_req.id,
+                            original_request_id=fresh_req.original_request_id,
+                            result_data={"error": str(e)},
+                            result_count=0,
+                            execution_time_ms=0,
+                            elasticsearch_took_ms=0,
+                            cache_hit=False,
+                            executed_at=datetime.utcnow()
+                        )
+                        db.add(error_result)
                     
                     # Increment retry count
                     fresh_req.retry_count += 1
                     fresh_req.error_message = str(e)
-                    fresh_req.completed_at = datetime.utcnow()
+                    fresh_req.has_error = True
                     
                     # Check if we should auto-retry or mark as failed
                     max_retries = 3  # Same as Celery max_retries
                     if fresh_req.retry_count < max_retries:
                         # Auto-retry: set status back to pending
                         fresh_req.status = "pending"
-                        fresh_req.completed_at = None  # Reset completion time
+                        fresh_req.started_at = None  # Reset started time
+                        fresh_req.assigned_worker = None  # Reset worker assignment
                         logger.info(f"[EXECUTE_QUERY] Request {req_id} will be retried (attempt {fresh_req.retry_count}/{max_retries})")
                     else:
                         # Max retries exceeded: mark as failed
                         fresh_req.status = "failed"
+                        fresh_req.completed_at = datetime.utcnow()
                         logger.error(f"[EXECUTE_QUERY] Request {req_id} exceeded max retries ({max_retries}), marked as failed")
                     
                     db.commit()

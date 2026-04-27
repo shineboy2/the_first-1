@@ -18,6 +18,7 @@ from sqlalchemy import (
     ARRAY,
     ForeignKey,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 
 from shared.database.base import Base, TimestampMixin
@@ -43,6 +44,7 @@ class User(Base, TimestampMixin):
     monthly_request_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=2000)
     max_results_per_request: Mapped[int] = mapped_column(Integer, nullable=False, default=1000)
     allowed_indices: Mapped[List[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
+    allowed_external_apis: Mapped[List[str]] = mapped_column(JSONB, nullable=False, server_default='[]')
     profile_type: Mapped[str] = mapped_column(String(50), ForeignKey("profile_type_configs.name"), nullable=False, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, index=True)

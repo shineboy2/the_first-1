@@ -9,8 +9,6 @@ import {
   LayoutDashboard,
   Users,
   Zap,
-
-  Settings,
   LogOut,
   Menu,
   Moon,
@@ -22,6 +20,7 @@ import {
   Download,
   Globe,
   Database,
+  Settings as SettingsIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 
@@ -30,6 +29,11 @@ const navigation = [
     name: "داشبورد",
     href: "/dashboard",
     icon: LayoutDashboard,
+  },
+  {
+    name: "انواع پروفایل",
+    href: "/dashboard/profile-types",
+    icon: Shield,
   },
   {
     name: "کاربران",
@@ -42,9 +46,24 @@ const navigation = [
     icon: FileCode,
   },
   {
+    name: "API‌های خارجی",
+    href: "/dashboard/external-apis",
+    icon: Globe,
+  },
+  {
     name: "درخواست‌ها",
     href: "/dashboard/requests",
     icon: Zap,
+  },
+  {
+    name: "تنظیمات خروجی",
+    href: "/dashboard/exports",
+    icon: Download,
+  },
+  {
+    name: "تنظیمات Elasticsearch",
+    href: "/dashboard/elasticsearch-configs",
+    icon: Database,
   },
   {
     name: "ورکرها",
@@ -56,31 +75,13 @@ const navigation = [
     href: "/dashboard/tasks",
     icon: ListTodo,
   },
-  {
-    name: "تنظیمات خروجی",
-    href: "/dashboard/exports",
-    icon: Download,
-  },
-  {
-    name: "API‌های خارجی",
-    href: "/dashboard/external-apis",
-    icon: Globe,
-  },
-  {
-    name: "تنظیمات Elasticsearch",
-    href: "/dashboard/elasticsearch-configs",
-    icon: Database,
-  },
+];
 
-  {
-    name: "انواع پروفایل",
-    href: "/dashboard/profile-types",
-    icon: Shield,
-  },
+const settingsNavigation = [
   {
     name: "تنظیمات",
     href: "/dashboard/settings",
-    icon: Settings,
+    icon: SettingsIcon,
   },
 ];
 
@@ -131,7 +132,9 @@ export default function DashboardLayout({
           <nav className="space-y-1 px-2 py-4">
             {navigation.map((item) => {
               const Icon = item.icon;
-              const isActive = pathname === item.href;
+              // Check if current path matches or if it's exports page redirecting to storage-settings
+              const isActive = pathname === item.href || 
+                (item.href === "/dashboard/exports" && pathname === "/dashboard/storage-settings");
               return (
                 <Link key={item.href} href={item.href}>
                   <Button
@@ -150,12 +153,26 @@ export default function DashboardLayout({
           {/* Sidebar Footer */}
           <div className="border-t border-gray-200 dark:border-gray-700 p-4 absolute bottom-0 left-0 right-0 bg-white dark:bg-gray-800">
             <div className="mb-4 space-y-2">
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                {user?.username}
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                {user?.email}
-              </p>
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {user?.username}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {user?.email}
+                  </p>
+                </div>
+                <Link href="/dashboard/settings">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    <SettingsIcon className="h-4 w-4" />
+                  </Button>
+                </Link>
+              </div>
             </div>
 
             <div className="flex gap-2">

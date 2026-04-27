@@ -28,6 +28,28 @@ async def get_requests(
     for row in rows:
         r = row[0] # IncomingRequest object
         username = row[1] # username string
+        
+        # Compute outcome based on status, has_error, and result
+        try:
+            has_error_val = getattr(r, 'has_error', False)
+        except AttributeError:
+            has_error_val = False
+            
+        if r.status in ['pending', 'processing']:
+            outcome = 'pending'
+        elif has_error_val or r.status == 'failed':
+            outcome = 'error'
+        elif r.status == 'completed' and r.result:
+            outcome = 'success'
+        else:
+            outcome = 'unknown'
+        
+        # Determine if this is an external API request
+        is_external_api = r.query_type == "external_api"
+        api_name = None
+        if is_external_api and r.query_params:
+            api_name = r.query_params.get("api_type")
+        
         item = {
             "id": r.id,
             "original_request_id": r.original_request_id,
@@ -42,7 +64,10 @@ async def get_requests(
             "updated_at": r.updated_at or r.created_at, # Fallback
             "progress": 0.0,
             "processing_time": 0.0,
-            "result": r.result.result_data if r.result else None
+            "result": r.result.result_data if r.result else None,
+            "outcome": outcome,  # Add outcome field
+            "is_external_api": is_external_api,  # Add external API flag
+            "api_name": api_name  # Add API name if external
         }
         results.append(item)
     return results
@@ -73,6 +98,27 @@ async def get_request(
     r = row[0]
     username = row[1]
     
+    # Compute outcome based on status, has_error, and result
+    try:
+        has_error_val = getattr(r, 'has_error', False)
+    except AttributeError:
+        has_error_val = False
+        
+    if r.status in ['pending', 'processing']:
+        outcome = 'pending'
+    elif has_error_val or r.status == 'failed':
+        outcome = 'error'
+    elif r.status == 'completed' and r.result:
+        outcome = 'success'
+    else:
+        outcome = 'unknown'
+    
+    # Determine if this is an external API request
+    is_external_api = r.query_type == "external_api"
+    api_name = None
+    if is_external_api and r.query_params:
+        api_name = r.query_params.get("api_type")
+    
     return {
         "id": r.id,
         "original_request_id": r.original_request_id,
@@ -87,7 +133,10 @@ async def get_request(
         "updated_at": r.updated_at or r.created_at,
         "progress": 0.0,
         "processing_time": 0.0,
-        "result": r.result.result_data if r.result else None
+        "result": r.result.result_data if r.result else None,
+        "outcome": outcome,  # Add outcome field
+        "is_external_api": is_external_api,  # Add external API flag
+        "api_name": api_name  # Add API name if external
     }
 
 async def get_request_stats(

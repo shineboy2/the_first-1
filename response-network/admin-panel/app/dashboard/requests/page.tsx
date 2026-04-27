@@ -354,9 +354,21 @@ export default function RequestsPage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge variant={getStatusBadgeVariant((request as any).effective_status || request.status)}>
-                              {getStatusLabel((request as any).effective_status || request.status)}
-                            </Badge>
+                            <div className="flex gap-2 items-center">
+                              <Badge variant={getStatusBadgeVariant((request as any).effective_status || request.status)}>
+                                {getStatusLabel((request as any).effective_status || request.status)}
+                              </Badge>
+                              {(request as any).is_external_api && (
+                                <Badge variant="secondary" className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                                  API: {(request as any).api_name || 'External'}
+                                </Badge>
+                              )}
+                              {!(request as any).is_external_api && request.query_type !== 'external_api' && (
+                                <Badge variant="outline" className="bg-blue-50 text-blue-700 dark:bg-blue-900 dark:text-blue-200">
+                                  Elasticsearch
+                                </Badge>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell className="text-sm text-gray-600 dark:text-gray-400">
                             {new Date(request.created_at).toLocaleDateString("fa-IR", {

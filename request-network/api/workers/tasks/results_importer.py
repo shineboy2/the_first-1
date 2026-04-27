@@ -90,7 +90,14 @@ def import_results_from_response_network(self):
 
                         # Create Response object
                         response_data = result_data.get("result_data", {})
-                        has_error = "error" in response_data
+                        
+                        # Check has_error from the result_data (exported from response-network)
+                        has_error = result_data.get("has_error", False)
+                        
+                        # Also check if there's an error in the response_data itself
+                        if not has_error and "error" in response_data:
+                            has_error = True
+                        
                         error_message = response_data.get("error") if has_error else None
                         
                         response_obj = Response(
@@ -104,8 +111,11 @@ def import_results_from_response_network(self):
                         )
                         db.add(response_obj)
 
-                        # Update request status
-                        request.status = "completed"
+                        # Update request status based on has_error
+                        if has_error:
+                            request.status = "completed_error"
+                        else:
+                            request.status = "completed_success"
                         request.result_received_at = datetime.utcnow()
                         
                         # Invalidate cache for this request (async logic omitted/preserved)

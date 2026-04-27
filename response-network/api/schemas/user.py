@@ -13,6 +13,7 @@ class UserBase(BaseModel):
     monthly_request_limit: int = 2000
     max_results_per_request: int = 1000
     allowed_indices: list[str] = []
+    allowed_external_apis: list[str] = []
 
 
 class UserRead(UserBase):
@@ -24,6 +25,7 @@ class UserRead(UserBase):
     monthly_request_limit: int
     max_results_per_request: int
     allowed_indices: list[str]
+    allowed_external_apis: list[str]
 
     class Config:
         from_attributes = True
@@ -51,6 +53,7 @@ class UserUpdate(BaseModel):
     username: str | None = None
     password: str | None = None
     profile_type: str | None = None
+    allowed_external_apis: list[str] | None = None
 
     @field_validator('profile_type')
     @classmethod
