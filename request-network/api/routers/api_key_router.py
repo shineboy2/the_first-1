@@ -12,7 +12,7 @@ from models.user import User
 from models.api_key import ApiKey as APIKey
 from schemas.api_key import APIKeyCreate, APIKeyRead, APIKeyGenerated
 from auth.dependencies import get_current_active_user
-from shared.logger import get_logger
+from .shared.logger import get_logger
 
 router = APIRouter(prefix="/api-keys", tags=["API Keys"])
 log = get_logger(__name__)

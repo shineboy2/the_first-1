@@ -2,7 +2,7 @@ import asyncio
 from sqlalchemy.ext.asyncio import create_async_engine
 from models.settings import Settings, UserSettings
 from core.config import settings
-from shared.database.base import BaseModel
+from .shared.database.base import BaseModel
 
 async def create_tables():
     engine = create_async_engine(str(settings.DATABASE_URL))

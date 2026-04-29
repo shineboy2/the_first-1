@@ -27,7 +27,7 @@ if config.config_file_name is not None:
 
 # --- Model Metadata ---
 # Import your models' MetaData object for 'autogenerate' support.
-from shared.database.base import Base
+from .shared.database.base import Base
 target_metadata = Base.metadata
 
 # Import all models here so that Alembic's autogenerate can see them.

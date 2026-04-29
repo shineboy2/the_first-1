@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 
@@ -14,6 +15,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="fa" dir="rtl" suppressHydrationWarning>
+      <head>
+        <Script src="/config.js" strategy="beforeInteractive" />
+      </head>
       <body className="antialiased">
         <ThemeProvider
           attribute="class"

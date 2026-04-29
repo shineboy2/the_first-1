@@ -19,7 +19,7 @@ async def seed_database():
 async def init_database():
     """Initialize database schema"""
     print("📦 Initializing Request Network database...")
-    from shared.database.base import Base
+    from .shared.database.base import Base
     import models  # Ensure all models are loaded
     from db.session import async_engine
     

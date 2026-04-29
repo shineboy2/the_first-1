@@ -5,7 +5,7 @@ from uuid import UUID
 from sqlalchemy import Column, DateTime, String, JSON, Boolean, Integer, Enum as SQLAEnum, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PostgresUUID
 
-from shared.database.base import Base
+from .shared.database.base import Base
 import enum
 
 class WorkerType(enum.Enum):

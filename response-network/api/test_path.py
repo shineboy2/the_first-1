@@ -16,7 +16,7 @@ print(f"\nAfter sys.path.insert:")
 print(f"  Added: {Path(__file__).parent.parent.parent}")
 
 try:
-    from shared.database.base import BaseModel, TimestampMixin, UUIDMixin
+    from .shared.database.base import BaseModel, TimestampMixin, UUIDMixin
     print("\nImport successful!")
 except Exception as e:
     print(f"\nImport failed: {e}")

@@ -7,7 +7,7 @@ api_dir = Path(__file__).resolve().parent
 if str(api_dir) not in sys.path:
     sys.path.insert(0, str(api_dir))
 
-from shared.database.base import Base
+from .shared.database.base import Base
 from db.session import async_engine
 import models  # Import all models to register them with Base
 

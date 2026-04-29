@@ -21,6 +21,9 @@ FROM node:20-slim
 
 WORKDIR /app
 
+# Install envsubst for runtime config generation
+RUN apt-get update && apt-get install -y gettext-base && rm -rf /var/lib/apt/lists/*
+
 # نصب PM2 برای مدیریت سرور
 RUN npm install -g pm2
 
@@ -30,8 +33,12 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/package.json .
 
+# Copy runtime config generation script
+COPY generate-config.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/generate-config.sh
+
 # Expose port
 EXPOSE 3000
 
-# Start سرور
-CMD ["npm", "start"]
+# Generate runtime config and start server
+CMD ["/bin/sh", "-c", "generate-config.sh && npm start"]

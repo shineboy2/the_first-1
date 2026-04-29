@@ -74,7 +74,7 @@ async def seed_database():
 async def init_database():
     """Initialize database schema"""
     print("📦 Initializing database...")
-    from shared.database.base import Base
+    from .shared.database.base import Base
     
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

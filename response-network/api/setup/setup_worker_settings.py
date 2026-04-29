@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.config import settings
 from core.dependencies import get_db
 from models.worker_settings import WorkerSettings
-from shared.config.base_worker_settings import BaseWorkerSettings, BASE_EXPORT_PATH
+from .shared.config.base_worker_settings import BaseWorkerSettings, BASE_EXPORT_PATH
 
 async def setup_base_worker_settings(db: AsyncSession):
     """Setup base worker settings in database."""

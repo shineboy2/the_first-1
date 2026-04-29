@@ -24,15 +24,22 @@ def get_logger(
     is_dev_logging = os.getenv("DEV_LOGGING", "false").lower() in ("true", "1", "t")
 
     if not structlog.is_configured():
-        # Simplified configuration to avoid recursion errors in production
-        # Always use ConsoleRenderer for now as it's more robust against traceback issues
-        processors = [
+        shared_processors = [
             structlog.contextvars.merge_contextvars,
             structlog.stdlib.add_logger_name,
             structlog.stdlib.add_log_level,
             structlog.processors.TimeStamper(fmt="iso"),
-            structlog.dev.ConsoleRenderer()
         ]
+
+        if is_dev_logging:
+            # Human-readable logs for development
+            processors = shared_processors + [structlog.dev.ConsoleRenderer()]
+        else:
+            # JSON logs for production/staging
+            processors = shared_processors + [
+                structlog.processors.dict_tracebacks,
+                structlog.processors.JSONRenderer(),
+            ]
 
         structlog.configure(
             processors=processors,

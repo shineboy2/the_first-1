@@ -1,9 +1,19 @@
 // api.ts
 import axios from "axios";
 
+// Function to get API URL from runtime config or fallback to build-time config
+const getApiUrl = () => {
+  // Runtime config has priority
+  if (typeof window !== 'undefined' && (window as any).__RUNTIME_CONFIG__) {
+    return (window as any).__RUNTIME_CONFIG__.API_URL;
+  }
+  // Fallback to build-time config
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
+};
+
 // Create an axios instance with default config
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL,
+  baseURL: getApiUrl(),
   withCredentials: true,
   headers: {
     "Accept": "application/json",
