@@ -214,6 +214,7 @@ services:
       - "${ADMIN_PORT:-3002}:3002"
     environment:
       - NEXT_PUBLIC_ENV=production
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://192.168.214.146:8001}
     networks:
       - request-net
     depends_on:

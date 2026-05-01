@@ -14,11 +14,11 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
 
     # --- Database Settings ---
-    RESPONSE_DB_USER: str = "postgres"
-    RESPONSE_DB_PASSWORD: str = ""
-    RESPONSE_DB_HOST: str = "localhost"
+    RESPONSE_DB_USER: str = "response_user"
+    RESPONSE_DB_PASSWORD: str = "secret"
+    RESPONSE_DB_HOST: str = "postgres"
     RESPONSE_DB_PORT: int = 5432
-    RESPONSE_DB_NAME: str = "response_network"
+    RESPONSE_DB_NAME: str = "response_db"
 
     # Secret key for API access
     MONITORING_API_KEY: str = "super-secret-monitoring-key"
@@ -28,12 +28,7 @@ class Settings(BaseSettings):
     DEV_MODE: bool = True
 
     # CORS settings
-    BACKEND_CORS_ORIGINS: List[str] = [
-        "http://localhost:3000",
-        "http://localhost:8080",
-        "http://192.168.214.141:3000",
-        "http://192.168.214.146:3000",
-    ]
+    BACKEND_CORS_ORIGINS: str = "http://localhost:3000,http://localhost:8080"
 
     # Redis URL (for Celery stats)
     REDIS_URL: RedisDsn = "redis://redis-response:6379/0"

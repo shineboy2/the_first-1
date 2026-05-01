@@ -16,8 +16,8 @@ from sqlalchemy import pool
 from alembic import context
 
 # Import all models here
-from .shared.database.base import Base
-from .shared.models.worker_settings import WorkerSettings
+from shared.database.base import Base
+from shared.models.worker_settings import WorkerSettings
 from models.user import User
 from models.settings import Settings, UserSettings
 from models.request_type import RequestType

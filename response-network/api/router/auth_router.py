@@ -26,7 +26,7 @@ async def read_users_me(
     return current_user
 
 
-@router.post("/login", response_model=Token)
+@router.post("/login")
 async def login(
     response: Response,
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],

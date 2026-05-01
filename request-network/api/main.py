@@ -29,7 +29,7 @@ from routers import auth_router, request_router, admin_router, settings_router, 
 from routers import users as users_router  # Import users router
 from routers import external_request
 from router import monitoring_router
-from .shared.logger import get_logger
+from shared.logger import get_logger
 from custom_swagger import get_swagger_ui_html
 
 log = get_logger(__name__, level=settings.LOG_LEVEL)

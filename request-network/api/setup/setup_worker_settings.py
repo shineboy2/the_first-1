@@ -5,7 +5,7 @@ This script creates the base configuration file and directories.
 import json
 from pathlib import Path
 
-from .shared.config.base_worker_settings import BaseWorkerSettings, BASE_IMPORT_PATH
+from shared.config.base_worker_settings import BaseWorkerSettings, BASE_IMPORT_PATH
 
 def setup_base_worker_settings():
     """Setup base worker settings configuration."""
