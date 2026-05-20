@@ -18,12 +18,12 @@ router = APIRouter(tags=["admin-exports"])
 # Valid operation types
 VALID_OPERATION_TYPES = {"user_export", "request_types_export", "result_export", "request_import"}
 
-# Map operation types to settings keys
+# Map operation types to settings keys (must match what workers expect)
 OPERATION_TYPE_KEYS = {
-    "user_export": "storage_config_user_export",
-    "request_types_export": "storage_config_request_types_export",
-    "result_export": "storage_config_result_export",
-    "request_import": "storage_config_request_import",
+    "user_export": "export_config",
+    "request_types_export": "request_types_export_config",
+    "result_export": "result_export_config",
+    "request_import": "request_import_config",
 }
 
 
@@ -59,9 +59,14 @@ async def get_all_configs(
         db_setting = result.scalar_one_or_none()
         
         if db_setting and db_setting.value:
+            # Convert storage_type back to destination_type for frontend
+            value = db_setting.value.copy()
+            if 'storage_type' in value:
+                value['destination_type'] = value.pop('storage_type')
+            
             config = StorageConfig(
                 operation_type=op_type,
-                **db_setting.value,
+                **value,
                 configured=True
             )
         else:
@@ -92,9 +97,14 @@ async def get_config(
     db_setting = result.scalar_one_or_none()
     
     if db_setting and db_setting.value:
+        # Convert storage_type back to destination_type for frontend
+        value = db_setting.value.copy()
+        if 'storage_type' in value:
+            value['destination_type'] = value.pop('storage_type')
+        
         return StorageConfig(
             operation_type=operation_type,
-            **db_setting.value,
+            **value,
             configured=True
         )
     else:
@@ -118,10 +128,11 @@ async def update_config(
     key = OPERATION_TYPE_KEYS[operation_type]
     
     # Prepare the value to store (exclude operation_type and configured fields)
+    # Convert destination_type to storage_type for worker compatibility
     value = {
         "enabled": config_data.enabled,
         "format": config_data.format,
-        "destination_type": config_data.destination_type,
+        "storage_type": config_data.destination_type,  # Workers expect storage_type
         "local_path": config_data.local_path,
         "ftp_host": config_data.ftp_host,
         "ftp_port": config_data.ftp_port,
@@ -186,8 +197,10 @@ async def test_operation(
     
     config = db_setting.value
     
-    # Test based on destination type
-    if config.get("destination_type") == "local":
+    # Test based on destination type (check both storage_type and destination_type for compatibility)
+    dest_type = config.get("storage_type") or config.get("destination_type", "local")
+    
+    if dest_type == "local":
         try:
             from pathlib import Path
             path = Path(config.get("local_path", "./exports"))
@@ -202,7 +215,7 @@ async def test_operation(
                 "message": f"Failed to write to local path: {str(e)}"
             }
     
-    elif config.get("destination_type") == "ftp":
+    elif dest_type == "ftp":
         try:
             from ftplib import FTP
             ftp_host = config.get("ftp_host")

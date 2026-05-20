@@ -2,18 +2,19 @@
 import axios from "axios";
 
 // Function to get API URL from runtime config or fallback to build-time config
+// Called dynamically on each request so runtime config.js is always respected
 const getApiUrl = () => {
-  // Runtime config has priority
-  if (typeof window !== 'undefined' && (window as any).__RUNTIME_CONFIG__) {
+  // Runtime config has priority (loaded via /config.js at runtime)
+  if (typeof window !== 'undefined' && (window as any).__RUNTIME_CONFIG__?.API_URL) {
     return (window as any).__RUNTIME_CONFIG__.API_URL;
   }
   // Fallback to build-time config
   return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
 };
 
-// Create an axios instance with default config
+// Create an axios instance - baseURL is set dynamically in the interceptor
+// so that window.__RUNTIME_CONFIG__ is always read at request time, not at module load time
 const api = axios.create({
-  baseURL: getApiUrl(),
   withCredentials: true,
   headers: {
     "Accept": "application/json",
@@ -28,6 +29,9 @@ const api = axios.create({
 // Add request interceptor to attach token and logging
 api.interceptors.request.use(
   (config) => {
+    // Always resolve baseURL dynamically so runtime config.js is respected
+    config.baseURL = getApiUrl();
+
     // Get token from localStorage (Zustand persist storage)
     if (typeof window !== "undefined") {
       try {
