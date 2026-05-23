@@ -210,6 +210,7 @@ def execute_pending_queries(self):
                 
                 import urllib.request
                 import urllib.error
+                import ssl
                 
                 req_data = json.dumps(query_body).encode('utf-8')
                 req_obj = urllib.request.Request(es_url, data=req_data, headers={'Content-Type': 'application/json'})
@@ -218,8 +219,19 @@ def execute_pending_queries(self):
                 if es_auth:
                     req_obj.add_header('Authorization', es_auth)
                 
+                # Create SSL context based on verify_ssl setting
+                ssl_context = None
+                if es_config and not es_config.verify_ssl:
+                    # Disable SSL verification if configured
+                    ssl_context = ssl.create_default_context()
+                    ssl_context.check_hostname = False
+                    ssl_context.verify_mode = ssl.CERT_NONE
+                    logger.info(f"[ELASTICSEARCH] SSL verification disabled for {es_url}")
+                elif es_config:
+                    logger.info(f"[ELASTICSEARCH] SSL verification enabled for {es_url}")
+                
                 try:
-                    with urllib.request.urlopen(req_obj, timeout=10.0) as f:
+                    with urllib.request.urlopen(req_obj, timeout=10.0, context=ssl_context) as f:
                         response_body = f.read().decode('utf-8')
                         es_result = json.loads(response_body)
                 except urllib.error.HTTPError as e:

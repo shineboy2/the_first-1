@@ -62,9 +62,6 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/1
-      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/1
-      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/1
       - SECRET_KEY=${SECRET_KEY}
       - FTP_HOST=${FTP_HOST}
       - FTP_PORT=${FTP_PORT:-21}
@@ -181,9 +178,6 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/1
-      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/1
-      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/1
       - FLOWER_PORT=5555
       - FLOWER_BASIC_AUTH=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin123}
     command: celery -A workers.celery_app flower --port=5555 --basic_auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin123}
@@ -205,16 +199,11 @@ services:
     build:
       context: ./admin-panel
       dockerfile: Dockerfile
-      args:
-        # آدرس API باید در زمان بیلد مشخص شود تا در استاتیک فایل‌ها ذخیره گردد
-        # روی سرور عملیاتی این متغیر باید آی‌پی سرور باشد
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://192.168.214.146:8001}
     container_name: request-admin-panel
     ports:
       - "${ADMIN_PORT:-3002}:3002"
     environment:
-      - NEXT_PUBLIC_ENV=production
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://192.168.214.146:8001}
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://192.168.214.135:8001}
     networks:
       - request-net
     depends_on:

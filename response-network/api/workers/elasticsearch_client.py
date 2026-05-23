@@ -73,6 +73,9 @@ class ElasticsearchClient:
         
         # Fallback to settings
         return cls()
+    
+    async def close(self):
+        """Close the Elasticsearch connection."""
         if self.es:
             await self.es.close()
     
