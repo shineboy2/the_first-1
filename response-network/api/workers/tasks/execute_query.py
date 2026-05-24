@@ -224,21 +224,23 @@ def execute_pending_queries(self):
                 
                 # اگر URL با https شروع می‌شود، حتماً ssl_context بسازید
                 if es_url.startswith('https://'):
-                    ssl_context = ssl.create_default_context()
+                    verify_ssl = False  # default: self-signed certs are common in internal networks
                     
-                    if es_config and not es_config.verify_ssl:
-                        # غیرفعال کردن کامل SSL verification
-                        ssl_context.check_hostname = False
-                        ssl_context.verify_mode = ssl.CERT_NONE
-                        logger.info(f"[ELASTICSEARCH] SSL verification disabled for {es_url}")
-                    elif es_config and es_config.verify_ssl:
-                        # فعال کردن SSL verification
-                        logger.info(f"[ELASTICSEARCH] SSL verification enabled for {es_url}")
+                    if es_config:
+                        verify_ssl = es_config.verify_ssl
+                        logger.info(f"[ELASTICSEARCH] Config from DB: verify_ssl={verify_ssl} for {es_url}")
                     else:
-                        # اگر config نداریم، به صورت پیش‌فرض SSL را غیرفعال کن
-                        ssl_context.check_hostname = False
-                        ssl_context.verify_mode = ssl.CERT_NONE
-                        logger.warning(f"[ELASTICSEARCH] No config from DB, disabling SSL verification for {es_url}")
+                        logger.warning(f"[ELASTICSEARCH] No config from DB, using default: verify_ssl={verify_ssl} for {es_url}")
+                    
+                    # Create SSL context
+                    if not verify_ssl:
+                        # For self-signed certificates, use unverified context
+                        ssl_context = ssl._create_unverified_context()
+                        logger.info(f"[ELASTICSEARCH] ✅ SSL verification DISABLED for {es_url}")
+                    else:
+                        # For verified certificates, use default context
+                        ssl_context = ssl.create_default_context()
+                        logger.info(f"[ELASTICSEARCH] ✅ SSL verification ENABLED for {es_url}")
                 
                 try:
                     with urllib.request.urlopen(req_obj, timeout=10.0, context=ssl_context) as f:
