@@ -14,13 +14,48 @@ import json
 from datetime import datetime, timedelta
 from elasticsearch import Elasticsearch
 import random
+import logging
+import ssl
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Elasticsearch connection
 ES_URL = "http://localhost:9200"
 
-def create_es_client():
-    """Create Elasticsearch client."""
-    return Elasticsearch([ES_URL])
+def create_es_client(verify_ssl=False):
+    """
+    Create Elasticsearch client.
+    
+    Args:
+        verify_ssl: Whether to verify SSL certificate (default: False)
+    """
+    try:
+        # Try to get runtime config from database
+        from db.session import SessionLocal
+        from models.elasticsearch_config import ElasticsearchConfig
+        
+        db = SessionLocal()
+        config = db.query(ElasticsearchConfig).filter(
+            ElasticsearchConfig.is_active == True
+        ).first()
+        db.close()
+        
+        if config:
+            logger.info(f"Using runtime Elasticsearch config: {config.url}")
+            kwargs = {"hosts": [config.url]}
+            if config.username and config.password:
+                kwargs["basic_auth"] = (config.username, config.password)
+            kwargs["verify_certs"] = config.verify_ssl
+            return Elasticsearch(**kwargs)
+    except Exception as e:
+        logger.warning(f"Failed to load runtime Elasticsearch config: {e}")
+    
+    # Fallback to ES_URL with verify_ssl parameter
+    kwargs = {"hosts": [ES_URL]}
+    kwargs["verify_certs"] = verify_ssl
+    return Elasticsearch(**kwargs)
 
 def setup_indices():
     """Create indices with proper mappings."""

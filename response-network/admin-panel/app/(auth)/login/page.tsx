@@ -57,7 +57,7 @@ export default function LoginPage() {
       formData.append("password", values.password);
 
       console.log("Sending login request with:", {
-        url: `${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/login`,
+        url: `${api.defaults.baseURL || 'http://localhost:8000'}/api/v1/auth/login`,
         data: formData.toString(),
       });
 

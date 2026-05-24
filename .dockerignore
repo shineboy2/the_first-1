@@ -42,3 +42,11 @@ response-network/api/exports/*.json
 response-network/api/exports/settings/*.json
 request-network/api/imports/*.json
 request-network/api/imports/users/*.json
+
+# Ignore shared_data (runtime data, not needed in image)
+shared_data/
+response-data/
+request-data/
+dist/
+exports/
+deploy/

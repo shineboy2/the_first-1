@@ -48,6 +48,7 @@ services:
 
   # =================== API Server ===================
   api:
+    image: response-network:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -113,6 +114,7 @@ services:
 
   # =================== Celery Worker ===================
   celery-worker:
+    image: response-network:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -151,6 +153,7 @@ services:
 
   # =================== Celery Beat (Scheduler) ===================
   celery-beat:
+    image: response-network:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -189,6 +192,7 @@ services:
 
   # =================== Flower (Celery Monitor) ===================
   flower:
+    image: response-network:latest
     build:
       context: .
       dockerfile: Dockerfile

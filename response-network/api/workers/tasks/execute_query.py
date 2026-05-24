@@ -221,14 +221,24 @@ def execute_pending_queries(self):
                 
                 # Create SSL context based on verify_ssl setting
                 ssl_context = None
-                if es_config and not es_config.verify_ssl:
-                    # Disable SSL verification if configured
+                
+                # اگر URL با https شروع می‌شود، حتماً ssl_context بسازید
+                if es_url.startswith('https://'):
                     ssl_context = ssl.create_default_context()
-                    ssl_context.check_hostname = False
-                    ssl_context.verify_mode = ssl.CERT_NONE
-                    logger.info(f"[ELASTICSEARCH] SSL verification disabled for {es_url}")
-                elif es_config:
-                    logger.info(f"[ELASTICSEARCH] SSL verification enabled for {es_url}")
+                    
+                    if es_config and not es_config.verify_ssl:
+                        # غیرفعال کردن کامل SSL verification
+                        ssl_context.check_hostname = False
+                        ssl_context.verify_mode = ssl.CERT_NONE
+                        logger.info(f"[ELASTICSEARCH] SSL verification disabled for {es_url}")
+                    elif es_config and es_config.verify_ssl:
+                        # فعال کردن SSL verification
+                        logger.info(f"[ELASTICSEARCH] SSL verification enabled for {es_url}")
+                    else:
+                        # اگر config نداریم، به صورت پیش‌فرض SSL را غیرفعال کن
+                        ssl_context.check_hostname = False
+                        ssl_context.verify_mode = ssl.CERT_NONE
+                        logger.warning(f"[ELASTICSEARCH] No config from DB, disabling SSL verification for {es_url}")
                 
                 try:
                     with urllib.request.urlopen(req_obj, timeout=10.0, context=ssl_context) as f:

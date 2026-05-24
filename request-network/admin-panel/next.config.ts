@@ -12,15 +12,22 @@ const nextConfig: NextConfig = {
     // your project has TypeScript errors.
     ignoreBuildErrors: true,
   },
-  async rewrites() {
-    return {
-      beforeFiles: [
-        {
-          source: "/api/:path*",
-          destination: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/:path*`,
-        },
-      ],
-    };
+  // ❌ حذف rewrite ثابت که API URL را build time پخته می‌کند
+  // ✅ استفاده از runtime config.js به جای آن
+  
+  // اضافه کردن headers برای config.js تا cache نشود
+  async headers() {
+    return [
+      {
+        source: '/config.js',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+          },
+        ],
+      },
+    ];
   },
 };
 
