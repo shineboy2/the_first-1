@@ -11,15 +11,14 @@ from sqlalchemy.future import select
 from core.hashing import get_password_hash
 
 
-
-
 def get_database_url():
     """Construct the database URL from environment variables."""
+    project_root = os.path.dirname(os.path.abspath(__file__))
     load_dotenv(os.path.join(project_root, ".env"))
 
-    user = os.getenv("RESPONSE_DB_USER", "user")
-    password = os.getenv("RESPONSE_DB_PASSWORD", "password")
-    host = os.getenv("RESPONSE_DB_HOST", "localhost")
+    user = os.getenv("RESPONSE_DB_USER", "response_user")
+    password = os.getenv("RESPONSE_DB_PASSWORD", "response_pass")
+    host = os.getenv("RESPONSE_DB_HOST", "resp-db")
     port = os.getenv("RESPONSE_DB_PORT", "5432")
     db_name = os.getenv("RESPONSE_DB_NAME", "response_db")
 

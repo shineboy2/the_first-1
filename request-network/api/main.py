@@ -28,6 +28,7 @@ from db.session import get_db_session
 from routers import auth_router, request_router, admin_router, settings_router, admin_imports, api_key_router, request_types_router
 from routers import users as users_router  # Import users router
 from routers import external_request
+from routers import captcha_router
 from router import monitoring_router
 from shared.logger import get_logger
 from custom_swagger import get_swagger_ui_html
@@ -85,6 +86,7 @@ app.add_middleware(RateLimitGracePeriodMiddleware)
 # Include API routers
 from routers import user_management_router
 app.include_router(auth_router.router, prefix=settings.API_V1_STR)
+app.include_router(captcha_router.router, prefix=settings.API_V1_STR)
 app.include_router(users_router.router, prefix=settings.API_V1_STR)
 app.include_router(request_router.router, prefix=settings.API_V1_STR)
 app.include_router(admin_router.router, prefix=settings.API_V1_STR)

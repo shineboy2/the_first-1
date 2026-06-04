@@ -7,6 +7,12 @@ import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 from celery import shared_task
+from sqlalchemy import create_engine, select, delete
+from sqlalchemy.orm import sessionmaker
+
+from models.sync_history import SyncHistory
+import sys
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +39,32 @@ def cleanup_old_files():
         stats = {
             "exports_deleted": 0,
             "imports_deleted": 0,
-            "total_size_freed": 0
+            "total_size_freed": 0,
+            "sync_history_deleted": 0
         }
+        
+        # پاکسازی تاریخچه همگام‌سازی از دیتابیس (قدیمی‌تر از 30 روز)
+        try:
+            db_user = os.getenv("RESPONSE_DB_USER", "postgres")
+            db_pass = os.getenv("RESPONSE_DB_PASSWORD", "postgres")
+            db_host = os.getenv("RESPONSE_DB_HOST", "127.0.0.1")
+            db_port = os.getenv("RESPONSE_DB_PORT", "5432")
+            db_name = os.getenv("RESPONSE_DB_NAME", "response_network")
+            database_url = f"postgresql+psycopg2://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+            
+            engine = create_engine(database_url)
+            SessionLocal = sessionmaker(bind=engine)
+            
+            with SessionLocal() as session:
+                cutoff_db_date = datetime.utcnow() - timedelta(days=30)
+                result = session.execute(
+                    delete(SyncHistory).where(SyncHistory.started_at < cutoff_db_date)
+                )
+                stats["sync_history_deleted"] = result.rowcount
+                session.commit()
+                logger.info(f"Cleaned {stats['sync_history_deleted']} old SyncHistory records (>{30} days)")
+        except Exception as e:
+            logger.error(f"Failed to clean SyncHistory: {e}")
         
         # پاکسازی فایل‌های export قدیمی
         if export_dir.exists():

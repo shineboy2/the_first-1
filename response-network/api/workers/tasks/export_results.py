@@ -15,6 +15,7 @@ from core.config import settings
 from models.incoming_request import IncomingRequest
 from models.query_result import QueryResult
 from models.settings import Settings as SettingsModel
+from models.sync_history import SyncHistory
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,14 @@ def export_completed_results(self):
         if not config_setting or not config_setting.value:
             logger.info("Skipping result export: configuration missing.")
             return {"status": "skipped", "reason": "config_missing"}
+            
+        sync_history = SyncHistory(
+            operation_type="result_export",
+            status="in_progress"
+        )
+        db.add(sync_history)
+        db.commit()
+        db.refresh(sync_history)
 
         export_config = config_setting.value
         
@@ -55,6 +64,10 @@ def export_completed_results(self):
         ).limit(50).all()
         
         if not results:
+            sync_history.status = "skipped"
+            sync_history.details = {"reason": "no_new_results"}
+            sync_history.completed_at = datetime.utcnow()
+            db.commit()
             return {"status": "no_new_results", "count": 0}
         
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
@@ -145,6 +158,10 @@ def export_completed_results(self):
             res.exported_at = datetime.utcnow()
             res.export_batch_id = batch_id
             
+        sync_history.status = "success"
+        sync_history.details = {"exported_count": len(results), "method": export_type}
+        sync_history.completed_at = datetime.utcnow()
+        
         db.commit()
         
         return {
@@ -155,8 +172,17 @@ def export_completed_results(self):
         }
             
     except Exception as exc:
-        logger.error(f"Result export failed: {exc}")
+        import traceback
+        error_trace = traceback.format_exc()
+        logger.error(f"Result export failed: {exc}\n{error_trace}")
         db.rollback()
+        try:
+            sync_history.status = "failed"
+            sync_history.details = {"error": str(exc), "traceback": error_trace}
+            sync_history.completed_at = datetime.utcnow()
+            db.commit()
+        except:
+            db.rollback()
         raise self.retry(exc=exc, countdown=60)
     finally:
         db.close()

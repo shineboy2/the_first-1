@@ -5,6 +5,7 @@ from .api_key import ApiKey
 from .audit_log import AuditLog
 from .batch import ImportBatch, ExportBatch
 from .settings import Settings, UserSettings
+from .sync_history import SyncHistory
 
 __all__ = [
     "User",
@@ -15,5 +16,6 @@ __all__ = [
     "ImportBatch",
     "ExportBatch",
     "Settings",
-    "UserSettings"
+    "UserSettings",
+    "SyncHistory"
 ]

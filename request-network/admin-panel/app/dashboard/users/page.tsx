@@ -298,7 +298,8 @@ export default function UsersPage() {
                       filteredUsers.map((user) => (
                         <TableRow key={user.id}>
                           <TableCell className="font-medium">
-                            {user.username}
+                            <div>{user.username}</div>
+                            <div className="font-mono text-[10px] text-muted-foreground mt-1 select-all">{user.id}</div>
                           </TableCell>
                           <TableCell>{user.email}</TableCell>
                           <TableCell className="text-center">

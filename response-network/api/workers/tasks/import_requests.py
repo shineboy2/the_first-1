@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from core.config import settings
 from core.dependencies import get_db_sync
 from models.incoming_request import IncomingRequest as RequestModel
+from core.sync_logger import sync_logger
 
 IMPORT_PATH = Path(settings.IMPORT_DIR) / "requests"
 
@@ -95,7 +96,7 @@ def import_requests_from_request_network(self):
                         total_duplicates += 1
                 except Exception as e:
                     # Log individual item error but continue
-                    print(f"Error importing request item: {e}")
+                    sync_logger.error(f"Error importing request item {req_data.get('id')}: {e}")
                     continue
 
             db.commit()
@@ -111,6 +112,7 @@ def import_requests_from_request_network(self):
 
     except Exception as exc:
         # Retry on error
+        sync_logger.error(f"Import task failed, retrying: {exc}")
         raise self.retry(exc=exc, countdown=60)
 
 

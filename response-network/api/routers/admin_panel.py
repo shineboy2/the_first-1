@@ -18,6 +18,7 @@ from db.session import get_db_session
 from models.user import User
 from models.incoming_request import IncomingRequest
 from models.query_result import QueryResult
+from models.sync_history import SyncHistory
 from auth.dependencies import get_current_admin_user
 
 logger = logging.getLogger(__name__)
@@ -438,5 +439,86 @@ async def get_request_stats(
             },
         }
     except Exception as e:
-        logger.error(f"Error getting request stats: {e}")
         raise HTTPException(status_code=500, detail="Error retrieving request statistics")
+
+from pydantic import BaseModel
+class ScheduleUpdate(BaseModel):
+    interval: float
+
+@router.get("/celery/schedules")
+async def get_celery_schedules(
+    _: Annotated[None, Depends(get_current_admin_user)] = None
+):
+    """
+    Get all Celery Beat schedules from RedBeat.
+    """
+    from redbeat import RedBeatSchedulerEntry
+    from workers.celery_app import celery_app
+    
+    entries = RedBeatSchedulerEntry.get_schedules(app=celery_app)
+    schedules = []
+    for key, entry in entries.items():
+        schedules.append({
+            "name": entry.name,
+            "task": entry.task,
+            "interval": entry.schedule.run_every.total_seconds() if hasattr(entry.schedule, "run_every") else None,
+            "enabled": True
+        })
+    return schedules
+
+@router.put("/celery/schedules/{name}")
+async def update_celery_schedule(
+    name: str,
+    update_data: ScheduleUpdate,
+    _: Annotated[None, Depends(get_current_admin_user)] = None
+):
+    """
+    Update a Celery Beat schedule interval.
+    """
+    from redbeat import RedBeatSchedulerEntry
+    from workers.celery_app import celery_app
+    from fastapi import HTTPException
+    
+    entries = RedBeatSchedulerEntry.get_schedules(app=celery_app)
+    if name not in entries:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+        
+    entry = entries[name]
+    from celery.schedules import schedule
+    entry.schedule = schedule(run_every=update_data.interval)
+    entry.save()
+    
+    return {"message": "Schedule updated successfully", "name": name, "interval": update_data.interval}
+
+@router.get("/sync-status")
+async def get_sync_status(
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    _: Annotated[None, Depends(get_current_admin_user)] = None,
+):
+    """
+    Get the latest sync status for various operation types.
+    """
+    try:
+        # Get the latest sync history for each operation type
+        operations = ["user_export", "request_types_export", "result_export", "request_import"]
+        results = {}
+        for op in operations:
+            stmt = select(SyncHistory).where(SyncHistory.operation_type == op).order_by(SyncHistory.started_at.desc()).limit(1)
+            result = await db.execute(stmt)
+            history = result.scalar_one_or_none()
+            if history:
+                results[op] = {
+                    "status": history.status,
+                    "started_at": history.started_at.isoformat() if history.started_at else None,
+                    "completed_at": history.completed_at.isoformat() if history.completed_at else None,
+                    "details": history.details,
+                }
+            else:
+                results[op] = None
+        
+        return results
+    except Exception as e:
+        logger.error(f"Error getting sync status: {e}")
+        raise HTTPException(status_code=500, detail="Error retrieving sync status")
+
+

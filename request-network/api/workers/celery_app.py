@@ -16,33 +16,34 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
-    beat_scheduler="celery.beat:PersistentScheduler",
-    beat_schedule={
-        # EXPORTERS (to Response Network)
-        # Export pending requests every 10 seconds
-        "export-pending-requests-every-10s": {
-            "task": "workers.tasks.export_requests.export_pending_requests",
-            "schedule": 10.0,
-        },
-        
-        # IMPORTERS (from Response Network)
-        # Import users from response network every 60 seconds (only if changed)
-        "import-users-every-60s": {
-            "task": "workers.tasks.users_importer.import_users_from_response_network",
-            "schedule": 60.0,
-        },
-        # Import results from response network every 10 seconds
-        "import-results-every-10s": {
-            "task": "workers.tasks.results_importer.import_results_from_response_network",
-            "schedule": 10.0,
-        },
-        # Cleanup old files daily
-        "cleanup-old-files-daily": {
-            "task": "cleanup.cleanup_old_files",
-            "schedule": 86400.0,  # هر 24 ساعت (روزانه)
-        },
-    },
+    beat_scheduler="redbeat.RedBeatScheduler",
+    redbeat_redis_url=settings.CELERY_BROKER_URL,
+    redbeat_key_prefix="redbeat",
+    # Initial static schedule is moved to database/redbeat setup script
+    # See initialization logic to populate RedBeat
 )
+
+from celery.signals import beat_init
+
+@beat_init.connect
+def setup_redbeat_tasks(sender, **kwargs):
+    from redbeat import RedBeatSchedulerEntry
+    
+    # Define default tasks
+    tasks = [
+        ("export-pending-requests", "workers.tasks.export_requests.export_pending_requests", 10.0),
+        ("import-users", "workers.tasks.users_importer.import_users_from_response_network", 60.0),
+        ("import-results", "workers.tasks.results_importer.import_results_from_response_network", 10.0),
+        ("cleanup-old-files", "workers.tasks.cleanup.cleanup_old_files", 86400.0),
+    ]
+    
+    for name, task, interval in tasks:
+        try:
+            entry = RedBeatSchedulerEntry(name, task, interval, app=sender.app)
+            entry.save()
+            print(f"RedBeat: Seeded task {name} with interval {interval}s")
+        except Exception as e:
+            print(f"RedBeat Error: Failed to seed task {name}: {e}")
 
 # Auto-discover tasks from this package
 celery_app.autodiscover_tasks(["workers.tasks"], force=True)

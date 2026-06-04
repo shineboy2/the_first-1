@@ -76,5 +76,10 @@ async def get_system_stats(db: Session = Depends(get_db_sync)):
         },
         "results": {
             "total": completed_requests
-        }
+        },
+        "requests_by_type": [],
+        "user_request_stats": [],
+        "request_types_stats": { "active": 0, "inactive": 0 },
+        "total_export_batches": 0,
+        "total_import_batches": 0
     }

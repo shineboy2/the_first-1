@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 
 from models.request_type import RequestType
 from models.request_type_parameter import RequestTypeParameter
+from models.sync_history import SyncHistory
 
 load_dotenv()
 
@@ -40,6 +41,14 @@ def export_request_types_to_request_network():
     session = Session()
     
     try:
+        sync_history = SyncHistory(
+            operation_type="request_types_export",
+            status="in_progress"
+        )
+        session.add(sync_history)
+        session.commit()
+        session.refresh(sync_history)
+        
         # Get all request types with parameters eager loaded
         result = session.execute(
             select(RequestType)
@@ -85,6 +94,10 @@ def export_request_types_to_request_network():
         
         if not config.get("enabled", False):
             logger.info("Request types export is disabled (request_types_export_config.enabled=false).")
+            sync_history.status = "skipped"
+            sync_history.details = {"reason": "disabled"}
+            sync_history.completed_at = datetime.utcnow()
+            session.commit()
             return {"status": "skipped", "reason": "disabled"}
         
         filename = "latest.json"
@@ -102,6 +115,12 @@ def export_request_types_to_request_network():
                 f.write(json_bytes)
             
             logger.info(f"Exported {len(export_data)} request types to {file_path}")
+            
+            sync_history.status = "success"
+            sync_history.details = {"exported_count": len(export_data), "method": "local"}
+            sync_history.completed_at = datetime.utcnow()
+            session.commit()
+            
             return {
                 "status": "success",
                 "total_count": len(export_data),
@@ -144,6 +163,12 @@ def export_request_types_to_request_network():
             ftp.quit()
             
             logger.info(f"Exported {len(export_data)} request types to FTP: {remote_path}/{filename}")
+            
+            sync_history.status = "success"
+            sync_history.details = {"exported_count": len(export_data), "method": "ftp"}
+            sync_history.completed_at = datetime.utcnow()
+            session.commit()
+            
             return {
                 "status": "success",
                 "total_count": len(export_data),
@@ -154,7 +179,16 @@ def export_request_types_to_request_network():
         return {"status": "error", "reason": f"unknown_storage_type_{storage_type}"}
     
     except Exception as e:
-        logger.error(f"Request types export failed: {e}")
+        import traceback
+        error_trace = traceback.format_exc()
+        logger.error(f"Request types export failed: {e}\n{error_trace}")
+        try:
+            sync_history.status = "failed"
+            sync_history.details = {"error": str(e), "traceback": error_trace}
+            sync_history.completed_at = datetime.utcnow()
+            session.commit()
+        except:
+            pass
         return {"status": "error", "reason": str(e)}
     finally:
         session.close()

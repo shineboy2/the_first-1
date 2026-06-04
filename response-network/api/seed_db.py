@@ -17,8 +17,21 @@ from models.settings import Settings, UserSettings
 from models.request_type import RequestType
 from models.request_type_parameter import RequestTypeParameter
 from models.request_access import UserRequestAccess
+from models.profile_type import ProfileType
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+async def create_profile_types(db: AsyncSession):
+    profiles = [
+        {"name": "admin", "description": "System Administrator", "is_active": True},
+        {"name": "user", "description": "Standard User", "is_active": True}
+    ]
+    for p in profiles:
+        result = await db.execute(select(ProfileType).where(ProfileType.name == p["name"]))
+        if not result.scalar_one_or_none():
+            db.add(ProfileType(**p))
+    await db.commit()
+    print("👥 Profile types created")
 
 async def create_admin_user(db: AsyncSession) -> User:
     # Check if admin already exists
@@ -139,19 +152,19 @@ async def create_request_type_parameters(db: AsyncSession, request_types: List[R
         # Different parameters for each request type
         if rt.name == "Standard Request":
             params = [
-                {"name": "priority", "description": "Request priority level", "parameter_type": "string", "is_required": True},
-                {"name": "category", "description": "Request category", "parameter_type": "string", "is_required": True}
+                {"name": "priority", "description": "Request priority level", "parameter_type": "string", "is_required": True, "placeholder_key": "priority"},
+                {"name": "category", "description": "Request category", "parameter_type": "string", "is_required": True, "placeholder_key": "category"}
             ]
         elif rt.name == "Premium Request":
             params = [
-                {"name": "urgency", "description": "Urgency level", "parameter_type": "integer", "is_required": True},
-                {"name": "callback_url", "description": "Callback URL for notifications", "parameter_type": "string", "is_required": False},
-                {"name": "custom_fields", "description": "Additional custom fields", "parameter_type": "json", "is_required": False}
+                {"name": "urgency", "description": "Urgency level", "parameter_type": "integer", "is_required": True, "placeholder_key": "urgency"},
+                {"name": "callback_url", "description": "Callback URL for notifications", "parameter_type": "string", "is_required": False, "placeholder_key": "callback_url"},
+                {"name": "custom_fields", "description": "Additional custom fields", "parameter_type": "json", "is_required": False, "placeholder_key": "custom_fields"}
             ]
         else:  # Batch Request
             params = [
-                {"name": "batch_size", "description": "Number of items in batch", "parameter_type": "integer", "is_required": True},
-                {"name": "format", "description": "Data format", "parameter_type": "string", "is_required": True}
+                {"name": "batch_size", "description": "Number of items in batch", "parameter_type": "integer", "is_required": True, "placeholder_key": "batch_size"},
+                {"name": "format", "description": "Data format", "parameter_type": "string", "is_required": True, "placeholder_key": "format"}
             ]
         
         for param_data in params:
@@ -211,8 +224,7 @@ async def create_user_request_access(db: AsyncSession, user: User, request_types
             access = UserRequestAccess(
                 user_id=user.id,
                 request_type_id=rt.id,
-                access_type=access_type,
-                allowed_indices=["*"],  # Allow all indices by default
+                max_requests_per_hour=100,
                 is_active=True
             )
             db.add(access)
@@ -223,6 +235,9 @@ async def create_user_request_access(db: AsyncSession, user: User, request_types
 async def main():
     print("\n🌱 Starting database seeding...")
     async with async_session() as db:
+        # Create profile types first
+        await create_profile_types(db)
+        
         # Create users
         admin = await create_admin_user(db)
         test_user = await create_test_user(db)

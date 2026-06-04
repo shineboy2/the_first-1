@@ -1,0 +1,408 @@
+version: "3.8"
+
+networks:
+  req_net:
+    driver: bridge
+    internal: false
+  resp_net:
+    driver: bridge
+    internal: false
+
+services:
+  # ==========================================
+  # FTP & Diode Simulation
+  # ==========================================
+  ftp-req:
+    image: fauria/vsftpd
+    container_name: sim-ftp-req
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "15m"
+        max-file: "3"
+    environment:
+      - FTP_USER=${FTP_USER}
+      - FTP_PASS=${FTP_PASS}
+      - PASV_ADDRESS=127.0.0.1
+    volumes:
+      - ./ftp-req-data:/home/vsftpd/${FTP_USER}
+    networks:
+      - req_net
+    restart: always
+
+  ftp-resp:
+    image: fauria/vsftpd
+    container_name: sim-ftp-resp
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "15m"
+        max-file: "3"
+    environment:
+      - FTP_USER=${FTP_USER}
+      - FTP_PASS=${FTP_PASS}
+      - PASV_ADDRESS=127.0.0.1
+    volumes:
+      - ./ftp-resp-data:/home/vsftpd/${FTP_USER}
+    networks:
+      - resp_net
+    restart: always
+
+  diode:
+    build:
+      context: .
+      dockerfile: Dockerfile.diode
+    container_name: sim-diode
+    volumes:
+      - ./ftp-req-data:/ftp-req
+      - ./ftp-resp-data:/ftp-resp
+    # Not connected to any network (perfect isolation)
+    network_mode: none
+    restart: always
+
+  # ==========================================
+  # Request Network Services
+  # ==========================================
+  req-db:
+    image: postgres:15-alpine
+    container_name: sim-req-db
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "15m"
+        max-file: "3"
+    environment:
+      - POSTGRES_USER=${REQ_DB_USER}
+      - POSTGRES_PASSWORD=${REQ_DB_PASSWORD}
+      - POSTGRES_DB=${REQ_DB_NAME}
+    volumes:
+      - ./data/req_db:/var/lib/postgresql/data
+    networks:
+      - req_net
+    restart: always
+
+  req-redis:
+    image: redis:7-alpine
+    container_name: sim-req-redis
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "15m"
+        max-file: "3"
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    networks:
+      - req_net
+    restart: always
+
+  req-api:
+    build:
+      context: ../request-network
+      dockerfile: Dockerfile
+    container_name: sim-req-api
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "15m"
+        max-file: "3"
+    environment:
+      - SERVICE_TYPE=api
+      - PYTHONUNBUFFERED=1
+      - REQUEST_DB_HOST=req-db
+      - REQUEST_DB_PORT=5432
+      - REQUEST_DB_USER=${REQ_DB_USER}
+      - REQUEST_DB_PASSWORD=${REQ_DB_PASSWORD}
+      - REQUEST_DB_NAME=${REQ_DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@req-redis:6379/0
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@req-redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@req-redis:6379/1
+      - SECRET_KEY=${SECRET_KEY}
+      - FTP_HOST=ftp-req
+      - FTP_PORT=${FTP_PORT}
+      - FTP_USER=${FTP_USER}
+      - FTP_PASSWORD=${FTP_PASSWORD}
+      - FTP_USE_TLS=${FTP_USE_TLS}
+      - BACKEND_CORS_ORIGINS=["http://localhost:3001"]
+    ports:
+      - "${REQ_API_PORT:-8001}:8000"
+    networks:
+      - req_net
+    depends_on:
+      - req-db
+      - req-redis
+      - ftp-req
+    restart: always
+
+  req-worker:
+    build:
+      context: ../request-network
+      dockerfile: Dockerfile
+    container_name: sim-req-worker
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "15m"
+        max-file: "3"
+    command: celery -A workers.celery_app worker -l info --concurrency=2
+    environment:
+      - SERVICE_TYPE=celery-worker
+      - PYTHONUNBUFFERED=1
+      - REQUEST_DB_HOST=req-db
+      - REQUEST_DB_PORT=5432
+      - REQUEST_DB_USER=${REQ_DB_USER}
+      - REQUEST_DB_PASSWORD=${REQ_DB_PASSWORD}
+      - REQUEST_DB_NAME=${REQ_DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@req-redis:6379/0
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@req-redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@req-redis:6379/1
+      - SECRET_KEY=${SECRET_KEY}
+      - FTP_HOST=ftp-req
+      - FTP_PORT=${FTP_PORT}
+      - FTP_USER=${FTP_USER}
+      - FTP_PASSWORD=${FTP_PASSWORD}
+      - FTP_USE_TLS=${FTP_USE_TLS}
+    networks:
+      - req_net
+    depends_on:
+      - req-redis
+      - req-db
+    restart: always
+
+  req-beat:
+    build:
+      context: ../request-network
+      dockerfile: Dockerfile
+    container_name: sim-req-beat
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "15m"
+        max-file: "3"
+    command: celery -A workers.celery_app beat -l info
+    environment:
+      - SERVICE_TYPE=celery-beat
+      - PYTHONUNBUFFERED=1
+      - REQUEST_DB_HOST=req-db
+      - REQUEST_DB_PORT=5432
+      - REQUEST_DB_USER=${REQ_DB_USER}
+      - REQUEST_DB_PASSWORD=${REQ_DB_PASSWORD}
+      - REQUEST_DB_NAME=${REQ_DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@req-redis:6379/0
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@req-redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@req-redis:6379/1
+      - SECRET_KEY=${SECRET_KEY}
+      - FTP_HOST=ftp-req
+      - FTP_PORT=${FTP_PORT}
+      - FTP_USER=${FTP_USER}
+      - FTP_PASSWORD=${FTP_PASSWORD}
+      - FTP_USE_TLS=${FTP_USE_TLS}
+    networks:
+      - req_net
+    depends_on:
+      - req-redis
+      - req-db
+    restart: always
+
+  req-admin:
+    build:
+      context: ../request-network/admin-panel
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:${REQ_API_PORT:-8001}
+    container_name: sim-req-admin
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "15m"
+        max-file: "3"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:${REQ_API_PORT:-8001}
+    ports:
+      - "${REQ_ADMIN_PORT:-3001}:3002"
+    networks:
+      - req_net
+    depends_on:
+      - req-api
+    restart: always
+
+  # ==========================================
+  # Response Network Services
+  # ==========================================
+  elasticsearch:
+    image: elasticsearch:8.11.3
+    container_name: sim-elasticsearch
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "15m"
+        max-file: "3"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    networks:
+      - resp_net
+    restart: always
+
+  resp-db:
+    image: postgres:15-alpine
+    container_name: sim-resp-db
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "15m"
+        max-file: "3"
+    environment:
+      - POSTGRES_USER=${RESP_DB_USER}
+      - POSTGRES_PASSWORD=${RESP_DB_PASSWORD}
+      - POSTGRES_DB=${RESP_DB_NAME}
+    volumes:
+      - ./data/resp_db:/var/lib/postgresql/data
+    networks:
+      - resp_net
+    restart: always
+
+  resp-redis:
+    image: redis:7-alpine
+    container_name: sim-resp-redis
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "15m"
+        max-file: "3"
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    networks:
+      - resp_net
+    restart: always
+
+  resp-api:
+    build:
+      context: ../response-network
+      dockerfile: Dockerfile
+    container_name: sim-resp-api
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "15m"
+        max-file: "3"
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    environment:
+      - PYTHONUNBUFFERED=1
+      - RESPONSE_DB_HOST=resp-db
+      - RESPONSE_DB_PORT=5432
+      - RESPONSE_DB_USER=${RESP_DB_USER}
+      - RESPONSE_DB_PASSWORD=${RESP_DB_PASSWORD}
+      - RESPONSE_DB_NAME=${RESP_DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@resp-redis:6379/0
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@resp-redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@resp-redis:6379/1
+      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+      - SECRET_KEY=${SECRET_KEY}
+      - FTP_HOST=ftp-resp
+      - FTP_PORT=${FTP_PORT}
+      - FTP_USER=${FTP_USER}
+      - FTP_PASSWORD=${FTP_PASSWORD}
+      - FTP_USE_TLS=${FTP_USE_TLS}
+      - BACKEND_CORS_ORIGINS=["http://localhost:3000"]
+    ports:
+      - "${RESP_API_PORT:-8000}:8000"
+    networks:
+      - resp_net
+    depends_on:
+      - resp-db
+      - resp-redis
+      - ftp-resp
+      - elasticsearch
+    restart: always
+
+  resp-worker:
+    build:
+      context: ../response-network
+      dockerfile: Dockerfile
+    container_name: sim-resp-worker
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "15m"
+        max-file: "3"
+    command: celery -A workers.celery_app worker -l info --concurrency=2
+    environment:
+      - PYTHONUNBUFFERED=1
+      - RESPONSE_DB_HOST=resp-db
+      - RESPONSE_DB_PORT=5432
+      - RESPONSE_DB_USER=${RESP_DB_USER}
+      - RESPONSE_DB_PASSWORD=${RESP_DB_PASSWORD}
+      - RESPONSE_DB_NAME=${RESP_DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@resp-redis:6379/0
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@resp-redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@resp-redis:6379/1
+      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+      - SECRET_KEY=${SECRET_KEY}
+      - FTP_HOST=ftp-resp
+      - FTP_PORT=${FTP_PORT}
+      - FTP_USER=${FTP_USER}
+      - FTP_PASSWORD=${FTP_PASSWORD}
+      - FTP_USE_TLS=${FTP_USE_TLS}
+    networks:
+      - resp_net
+    depends_on:
+      - resp-redis
+      - resp-db
+    restart: always
+
+  resp-beat:
+    build:
+      context: ../response-network
+      dockerfile: Dockerfile
+    container_name: sim-resp-beat
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "15m"
+        max-file: "3"
+    command: celery -A workers.celery_app beat -l info
+    environment:
+      - PYTHONUNBUFFERED=1
+      - RESPONSE_DB_HOST=resp-db
+      - RESPONSE_DB_PORT=5432
+      - RESPONSE_DB_USER=${RESP_DB_USER}
+      - RESPONSE_DB_PASSWORD=${RESP_DB_PASSWORD}
+      - RESPONSE_DB_NAME=${RESP_DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@resp-redis:6379/0
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@resp-redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@resp-redis:6379/1
+      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+      - SECRET_KEY=${SECRET_KEY}
+      - FTP_HOST=ftp-resp
+      - FTP_PORT=${FTP_PORT}
+      - FTP_USER=${FTP_USER}
+      - FTP_PASSWORD=${FTP_PASSWORD}
+      - FTP_USE_TLS=${FTP_USE_TLS}
+    networks:
+      - resp_net
+    depends_on:
+      - resp-redis
+      - resp-db
+    restart: always
+
+  resp-admin:
+    build:
+      context: ../response-network/admin-panel
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:${RESP_API_PORT:-8000}
+    container_name: sim-resp-admin
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "15m"
+        max-file: "3"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:${RESP_API_PORT:-8000}
+    ports:
+      - "${RESP_ADMIN_PORT:-3000}:3000"
+    networks:
+      - resp_net
+    depends_on:
+      - resp-api
+    restart: always

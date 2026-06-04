@@ -19,10 +19,12 @@ from fastapi.security import OAuth2PasswordBearer
 # Import core modules
 from core.config import settings
 from db.session import get_db_session, async_session
-from router import request_router, system_router, user_router, monitoring_router, stats_router
-from router import auth_router, request_type_router, worker_settings, profile_type_router, settings_router, admin_exports, storage_config_router
-from routers import admin_tasks
-from routers import admin_export_control
+from routers import request_router, system_router, user_router, monitoring_router, stats_router
+from routers import auth_router, request_type_router, worker_settings, profile_type_router, settings_router, admin_exports, storage_config_router
+from routers import external_apis
+from routers import elasticsearch_config
+from routers import captcha_router
+from routers import sync_history_router
 from routers import admin_panel
 from routers import profile_type_access
 from custom_swagger import get_swagger_ui_html
@@ -97,7 +99,9 @@ app.include_router(
 # Auth router doesn't need the security scheme as it contains the login endpoint
 app.include_router(auth_router, prefix=settings.API_V1_STR)
 
-# Also register auth endpoints at root level for frontend compatibility
+# Also register# Auth endpoints are now properly routed through auth_router at /api/v1/auth/
+app.include_router(captcha_router.router, prefix=settings.API_V1_STR)
+app.include_router(sync_history_router.router, prefix=settings.API_V1_STR)
 # We'll add a simple redirect/proxy endpoint
 
 # Worker settings router

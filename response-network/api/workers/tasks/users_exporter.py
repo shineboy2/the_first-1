@@ -19,6 +19,7 @@ load_dotenv()
 
 # Import Settings model
 from models.settings import Settings
+from models.sync_history import SyncHistory
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,15 @@ def export_users_to_request_network():
     session = Session()
     
     try:
+        # Create SyncHistory record
+        sync_history = SyncHistory(
+            operation_type="user_export",
+            status="in_progress"
+        )
+        session.add(sync_history)
+        session.commit()
+        session.refresh(sync_history)
+
         # Fetch Export Configuration
         result = session.execute(
             select(Settings).where(Settings.key == "export_config")
@@ -68,6 +78,10 @@ def export_users_to_request_network():
         config = config_setting.value
         if not config.get("enabled", False):
              logger.info("User export is disabled in configuration.")
+             sync_history.status = "skipped"
+             sync_history.details = {"reason": "disabled"}
+             sync_history.completed_at = datetime.utcnow()
+             session.commit()
              return {"status": "skipped", "reason": "disabled"}
 
         export_type = config.get("storage_type", "local")
@@ -179,7 +193,7 @@ def export_users_to_request_network():
             host = config.get("ftp_host")
             user = config.get("ftp_user")
             passwd = config.get("ftp_password")
-            port = config.get("ftp_port") or 21
+            port = int(config.get("ftp_port") or 21)
             # Use dedicated /users path for users export
             base_ftp_path = config.get("ftp_path", "/uploads")
             remote_path = "/users"  # Fixed path for user exports
@@ -226,8 +240,10 @@ def export_users_to_request_network():
                 logger.info(f"Successfully uploaded {filename} to FTP server at {remote_path}")
                 
             except Exception as e:
-                logger.error(f"FTP Upload failed: {e}")
-                return {"status": "error", "reason": f"ftp_failed: {str(e)}"}
+                import traceback
+                error_trace = traceback.format_exc()
+                logger.error(f"FTP Upload failed: {e}\n{error_trace}")
+                raise Exception(f"ftp_failed: {str(e)}\n{error_trace}")
         
         # Update last export timestamp in DB
         ts_result = session.execute(
@@ -248,6 +264,12 @@ def export_users_to_request_network():
             session.add(ts_setting)
         session.commit()
         
+        # Update SyncHistory
+        sync_history.status = "success"
+        sync_history.details = {"exported_count": len(users), "method": export_type}
+        sync_history.completed_at = datetime.utcnow()
+        session.commit()
+
         return {
             "status": "success",
             "exported_at": export_data["exported_at"],
@@ -256,7 +278,16 @@ def export_users_to_request_network():
         }
 
     except Exception as e:
-        logger.error(f"User export task failed: {e}")
+        import traceback
+        error_trace = traceback.format_exc()
+        logger.error(f"User export task failed: {e}\n{error_trace}")
+        try:
+            sync_history.status = "failed"
+            sync_history.details = {"error": str(e), "traceback": error_trace}
+            sync_history.completed_at = datetime.utcnow()
+            session.commit()
+        except:
+            pass
         return {"status": "error", "reason": str(e)}
     finally:
         session.close()

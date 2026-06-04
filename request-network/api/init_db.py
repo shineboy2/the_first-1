@@ -11,6 +11,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from setup.initialization import initialize_database
 
+import asyncio
+
 if __name__ == "__main__":
-    success = initialize_database()
+    success = asyncio.run(initialize_database())
     sys.exit(0 if success else 1)

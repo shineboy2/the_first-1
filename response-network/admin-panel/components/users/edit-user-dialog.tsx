@@ -149,8 +149,11 @@ export function EditUserDialog({
                             <p className="text-sm">
                                 <span className="font-medium">نام کاربری:</span> {user.username}
                             </p>
-                            <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                                نام کاربری قابل تغییر نیست
+                            <p className="text-sm mt-2">
+                                <span className="font-medium">شناسه کاربر (UUID):</span> <span className="font-mono text-xs select-all">{user.id}</span>
+                            </p>
+                            <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">
+                                نام کاربری و شناسه قابل تغییر نیستند
                             </p>
                         </div>
 

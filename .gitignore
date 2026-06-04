@@ -56,3 +56,8 @@ test_ext_api.py
 .vscode/
 .idea/
 .DS_Store
+# Simulation Data
+simulation/data/
+simulation/ftp-req-data/
+simulation/ftp-resp-data/
+

@@ -101,9 +101,9 @@ export default function DashboardPage() {
 
   // Status Pie Chart Data
   const statusData = systemStats ? [
-    { name: 'موفق', value: systemStats.completed_requests, color: STATUS_COLORS.completed },
-    { name: 'در انتظار', value: systemStats.pending_requests, color: STATUS_COLORS.pending },
-    { name: 'خطا', value: systemStats.failed_requests, color: STATUS_COLORS.failed },
+    { name: 'موفق', value: systemStats.requests.completed, color: STATUS_COLORS.completed },
+    { name: 'در انتظار', value: systemStats.requests.processing, color: STATUS_COLORS.pending },
+    { name: 'خطا', value: systemStats.requests.failed, color: STATUS_COLORS.failed },
   ].filter(d => d.value > 0) : [];
 
   // Active/Inactive Request Types Pie Chart Data
@@ -148,9 +148,9 @@ export default function DashboardPage() {
                 <Users className="h-4 w-4 text-blue-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">{systemStats.total_users}</div>
+                <div className="text-3xl font-bold">{systemStats.users.total}</div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {systemStats.active_users} کاربر فعال
+                  {systemStats.users.active} کاربر فعال
                 </p>
               </CardContent>
             </Card>
@@ -161,9 +161,9 @@ export default function DashboardPage() {
                 <Database className="h-4 w-4 text-indigo-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">{systemStats.total_requests}</div>
+                <div className="text-3xl font-bold">{systemStats.requests.total}</div>
                 <p className="text-xs text-muted-foreground mt-1 text-green-600">
-                  {systemStats.completed_requests} پردازش کامل شده
+                  {systemStats.requests.completed} پردازش کامل شده
                 </p>
               </CardContent>
             </Card>
@@ -189,13 +189,45 @@ export default function DashboardPage() {
                 <Activity className="h-4 w-4 text-yellow-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">{systemStats.total_export_batches}</div>
+                <div className="text-3xl font-bold">0</div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {systemStats.total_import_batches} واردات موفق
+                  0 واردات موفق
                 </p>
               </CardContent>
             </Card>
           </div>
+
+          {/* Sync Status Section */}
+          {syncStatus && (
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700">
+              <h3 className="text-sm font-semibold mb-3">وضعیت ارتباط شبکه (Sync)</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                {Object.entries(syncStatus).map(([key, data]) => {
+                  const isError = Object.hasOwn(data as object, 'error') || data.status === 'No data received' || data.status === 'Never synced';
+                  return (
+                    <div key={key} className={`p-3 rounded border-l-4 ${isError ? 'bg-red-50 dark:bg-red-900/20 border-red-500' : 'bg-green-50 dark:bg-green-900/20 border-green-500'}`}>
+                      <div className="font-medium mb-1 flex justify-between">
+                        <span>{key === "users" ? "کاربران" : key === "settings" ? "تنظیمات مشترک" : key === "request_types" ? "سرویس‌های قابل درخواست" : key === "profile_types" ? "انواع پروفایل" : key}</span>
+                        {isError ? (
+                          <XCircle className="h-4 w-4 text-red-500" />
+                        ) : (
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground flex items-center gap-1" dir="ltr">
+                        <Clock className="h-3 w-3" />
+                        <span>
+                          {data.last_sync ? new Date(data.last_sync).toLocaleString('fa-IR') :
+                            data.last_received ? new Date(data.last_received).toLocaleString('fa-IR') :
+                              (data.status || 'Unknown')}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Charts Row */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -351,47 +383,6 @@ export default function DashboardPage() {
                 </div>
               </CardContent>
             </Card>
-
-            <Card className="col-span-1 shadow-sm">
-              <CardHeader>
-                <CardTitle>وضعیت ارتباط شبکه (Sync)</CardTitle>
-                <CardDescription>آخرین همگام‌سازی‌های فایل و کاربر</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {syncStatus ? (
-                  <div className="space-y-4">
-                    {Object.entries(syncStatus).map(([key, data]) => {
-                      const isError = Object.hasOwn(data as object, 'error') || data.status === 'No data received' || data.status === 'Never synced';
-                      return (
-                        <div key={key} className="text-sm border-b pb-3 last:border-0">
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="capitalize font-medium text-gray-800 dark:text-gray-200">
-                              {key === "users" ? "کاربران" : key === "settings" ? "تنظیمات مشترک" : key === "request_types" ? "سرویس‌های قابل درخواست" : key === "profile_types" ? "انواع پروفایل" : key}
-                            </span>
-                            {isError ? (
-                              <XCircle className="h-4 w-4 text-red-500" />
-                            ) : (
-                              <CheckCircle2 className="h-4 w-4 text-green-500" />
-                            )}
-                          </div>
-                          <div className="text-gray-500 text-xs flex items-center gap-1 mt-2">
-                            <Clock className="h-3 w-3" />
-                            <span dir="ltr">
-                              {data.last_sync ? new Date(data.last_sync).toLocaleString('fa-IR') :
-                                data.last_received ? new Date(data.last_received).toLocaleString('fa-IR') :
-                                  (data.status || 'Unknown')}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500 text-center py-4">اطلاعاتی یافت نشد</p>
-                )}
-              </CardContent>
-            </Card>
-
           </div>
 
         </div>

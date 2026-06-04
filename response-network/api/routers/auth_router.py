@@ -1,7 +1,7 @@
 from datetime import timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Body
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Body, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -12,6 +12,7 @@ from core.config import settings
 from core.hashing import verify_password
 from db.session import get_db_session
 from models.user import User
+from routers.captcha_router import verify_captcha
 from schemas.user import UserRead
 from models.schemas import Token
 
@@ -29,16 +30,41 @@ async def read_users_me(
 @router.post("/login")
 async def login(
     response: Response,
-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    request: Request,
     db: AsyncSession = Depends(get_db_session),
 ):
     """
     Universal login endpoint that accepts both form data and JSON.
     The username can be the user's username or email address.
     """
+    form_data = await request.form()
+    username = form_data.get("username")
+    password = form_data.get("password")
+    captcha_id = form_data.get("captcha_id")
+    captcha_solution = form_data.get("captcha_solution")
+
+    if not username or not password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username and password are required",
+        )
+
+    # Verify Captcha
+    if not captcha_id or not captcha_solution:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="کپچا الزامی است (Captcha is required)",
+        )
+        
+    if not verify_captcha(captcha_id, captcha_solution):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="کپچا اشتباه است یا منقضی شده است (Invalid or expired captcha)",
+        )
+
     # 1. Find the user by username or email
     query = select(User).where(
-        (User.username == form_data.username) | (User.email == form_data.username)
+        (User.username == username) | (User.email == username)
     )
     result = await db.execute(query)
     user = result.scalar_one_or_none()
@@ -47,7 +73,7 @@ async def login(
     if (
         not user
         or not user.is_active
-        or not verify_password(form_data.password, user.hashed_password)
+        or not verify_password(password, user.hashed_password)
     ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

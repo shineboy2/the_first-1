@@ -17,15 +17,17 @@ from fastapi.security import OAuth2PasswordBearer
 # Import core modules
 from core.config import settings
 from db.session import get_db_session, async_session
-from router import request_router, system_router, user_router, monitoring_router, stats_router
-from router import auth_router, request_type_router, worker_settings, profile_type_router, settings_router, admin_exports, storage_config_router
+from routers import request_router, system_router, user_router, monitoring_router, stats_router
+from routers import auth_router, request_type_router, worker_settings, profile_type_router, settings_router, admin_exports, storage_config_router
 from routers import admin_tasks
 from routers import admin_export_control
+from routers import captcha_router
 from routers import admin_panel
 from routers import admin_storage_config
 from routers import profile_type_access
 from routers import external_apis
 from routers import elasticsearch_config
+from routers import admin_celery
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -69,35 +71,38 @@ if settings.BACKEND_CORS_ORIGINS:
 
 # Include routers with security scheme
 app.include_router(
-    request_router, 
+    request_router.router, 
     prefix=settings.API_V1_STR,
     dependencies=[Depends(oauth2_scheme)]
 )
 app.include_router(
-    system_router, 
+    system_router.router, 
     prefix=settings.API_V1_STR
 )
 app.include_router(
-    user_router, 
+    user_router.router, 
     prefix=settings.API_V1_STR,
     dependencies=[Depends(oauth2_scheme)]
 )
 app.include_router(
-    monitoring_router,
+    monitoring_router.router,
     prefix=settings.API_V1_STR
 )
 app.include_router(
-    stats_router,
+    stats_router.router,
     prefix=settings.API_V1_STR,
     dependencies=[Depends(oauth2_scheme)]
 )
 app.include_router(
-    request_type_router,
+    request_type_router.router,
     prefix=settings.API_V1_STR,
     dependencies=[Depends(oauth2_scheme)]
 )
 # Auth router doesn't need the security scheme as it contains the login endpoint
-app.include_router(auth_router, prefix=settings.API_V1_STR)
+app.include_router(auth_router.router, prefix=settings.API_V1_STR)
+
+# Captcha router doesn't need security scheme as it's used for login
+app.include_router(captcha_router.router, prefix=settings.API_V1_STR)
 
 # Also register auth endpoints at root level for frontend compatibility
 # We'll add a simple redirect/proxy endpoint
@@ -109,13 +114,16 @@ app.include_router(worker_settings.router, prefix=settings.API_V1_STR)
 app.include_router(storage_config_router.router, prefix=settings.API_V1_STR)
 
 # Settings router
-app.include_router(settings_router, prefix=settings.API_V1_STR, dependencies=[Depends(oauth2_scheme)])
+app.include_router(settings_router.router, prefix=settings.API_V1_STR, dependencies=[Depends(oauth2_scheme)])
 
 # Profile types router
 app.include_router(profile_type_router.router, prefix=settings.API_V1_STR, dependencies=[Depends(oauth2_scheme)])
 
 # Admin tasks router (task queue management)
 app.include_router(admin_tasks.router, prefix=settings.API_V1_STR, dependencies=[Depends(oauth2_scheme)])
+
+# Admin celery router (schedules)
+app.include_router(admin_celery.router, prefix=settings.API_V1_STR, dependencies=[Depends(oauth2_scheme)])
 
 # Admin export control router (DISABLED - replaced by admin_exports)
 # app.include_router(admin_export_control.router, dependencies=[Depends(oauth2_scheme)])
@@ -201,19 +209,25 @@ async def worker_stats():
     Gets a list of active (online) Celery workers by pinging them.
     """
     try:
-        # Currently disabled - will be implemented later
-        return {
-            "status": "disabled",
-            "message": "Worker stats endpoint is temporarily disabled"
-        }
+        from workers.celery_app import celery_app
+        
+        # Ping workers to see who is online
+        ping_results = celery_app.control.ping(timeout=1.0)
+        
+        # ping_results is a list of dicts like: [{'worker1@hostname': {'ok': 'pong'}}, ...]
+        active_workers = []
+        if ping_results:
+            for w_dict in ping_results:
+                active_workers.extend(list(w_dict.keys()))
 
-        if active_workers is None:
+        if not active_workers:
             # This can happen if the broker is down or no workers are connected.
             return {"active_workers": [], "count": 0, "status": "No workers responded. Broker might be down or no workers are running."}
 
         return {
-            "active_workers": list(active_workers.keys()),
+            "active_workers": active_workers,
             "count": len(active_workers),
+            "status": "ok"
         }
     except Exception as e:
         logger.error(f"Could not get worker stats: {e}", exc_info=True)

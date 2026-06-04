@@ -16,13 +16,14 @@ from elasticsearch import Elasticsearch
 import random
 import logging
 import ssl
+import os
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Elasticsearch connection
-ES_URL = "http://localhost:9200"
+ES_URL = os.getenv("ELASTICSEARCH_URL", "http://localhost:9200")
 
 def create_es_client(verify_ssl=False):
     """

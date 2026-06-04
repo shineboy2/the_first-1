@@ -217,7 +217,7 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
                         <CardContent className="space-y-4">
                             <div>
                                 <Label className="text-gray-500">شناسه (ID)</Label>
-                                <div className="font-mono text-sm mt-1">{user.id}</div>
+                                <div className="font-mono text-sm mt-1 select-all break-all">{user.id}</div>
                             </div>
                             <div>
                                 <Label className="text-gray-500">ایمیل</Label>

@@ -5,9 +5,9 @@ from sqlalchemy import String, DateTime, ForeignKey, Boolean
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from shared.database.base import BaseModel, UUIDMixin
+from shared.database.base import BaseModel, UUIDMixin, TimestampMixin
 
-class ApiKey(BaseModel, UUIDMixin):
+class ApiKey(BaseModel, UUIDMixin, TimestampMixin):
     """
     Represents API keys for service-to-service authentication.
     """

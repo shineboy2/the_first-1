@@ -42,6 +42,7 @@ export default function DashboardPage() {
   const { user, loading: authLoading } = useAuthStore();
   const router = useRouter();
   const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
+  const [syncStatus, setSyncStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -51,6 +52,14 @@ export default function DashboardPage() {
         // Fetch system stats
         const stats = await statsService.getSystemStats();
         setSystemStats(stats);
+        
+        // Fetch sync status
+        try {
+          const sync = await statsService.getSyncStatus();
+          setSyncStatus(sync);
+        } catch (e) {
+          console.error("Could not fetch sync status", e);
+        }
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
       } finally {
@@ -183,6 +192,47 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Sync Status Section */}
+          {syncStatus && (
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700">
+              <h3 className="text-sm font-semibold mb-3">وضعیت آخرین همگام‌سازی‌ها (Sync Status)</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                {[
+                  { key: 'user_export', label: 'کاربران' },
+                  { key: 'request_types_export', label: 'انواع درخواست' },
+                  { key: 'result_export', label: 'نتایج' },
+                  { key: 'request_import', label: 'درخواست‌های جدید' }
+                ].map(op => {
+                  const data = syncStatus[op.key];
+                  if (!data) return (
+                    <div key={op.key} className="p-3 bg-gray-50 dark:bg-gray-900 rounded">
+                      <div className="text-muted-foreground mb-1">{op.label}</div>
+                      <div className="text-xs">هیچوقت</div>
+                    </div>
+                  );
+                  
+                  const isSuccess = data.status === 'success' || data.status === 'completed';
+                  const isFailed = data.status === 'failed' || data.status === 'error';
+                  const isProcessing = data.status === 'in_progress' || data.status === 'processing';
+                  
+                  return (
+                    <div key={op.key} className={`p-3 rounded border-l-4 ${isSuccess ? 'bg-green-50 dark:bg-green-900/20 border-green-500' : isFailed ? 'bg-red-50 dark:bg-red-900/20 border-red-500' : isProcessing ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-500' : 'bg-gray-50 dark:bg-gray-900 border-gray-400'}`}>
+                      <div className="font-medium mb-1 flex justify-between">
+                        <span>{op.label}</span>
+                        <span className={isSuccess ? 'text-green-600' : isFailed ? 'text-red-600' : isProcessing ? 'text-blue-600' : 'text-gray-600'}>
+                          {isSuccess ? 'موفق' : isFailed ? 'خطا' : isProcessing ? 'در حال انجام' : data.status}
+                        </span>
+                      </div>
+                      <div className="text-xs text-muted-foreground" dir="ltr">
+                        {data.completed_at ? new Date(data.completed_at).toLocaleString('fa-IR') : (data.started_at ? new Date(data.started_at).toLocaleString('fa-IR') : '-')}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Charts Row */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

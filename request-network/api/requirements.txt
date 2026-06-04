@@ -38,6 +38,7 @@ python-multipart==0.0.20
 PyYAML==6.0.3
 redis==5.2.1
 celery==5.5.3
+celery-redbeat==2.2.0
 flower==2.0.1
 kombu==5.5.4
 billiard==4.2.2
@@ -56,3 +57,5 @@ uvicorn==0.27.1
 uvloop==0.21.0
 watchfiles==1.1.0
 websockets==15.0.1
+captcha==0.6.0
+Pillow==10.2.0

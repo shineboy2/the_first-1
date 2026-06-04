@@ -20,6 +20,7 @@ import {
   Download,
   Globe,
   Database,
+  Network,
   Settings as SettingsIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -56,7 +57,7 @@ const navigation = [
     icon: Zap,
   },
   {
-    name: "تنظیمات خروجی",
+    name: "تنظیمات همگام‌سازی",
     href: "/dashboard/exports",
     icon: Download,
   },
@@ -66,14 +67,9 @@ const navigation = [
     icon: Database,
   },
   {
-    name: "ورکرها",
+    name: "مدیریت تسک‌ها و ورکرها",
     href: "/dashboard/workers",
-    icon: Server,
-  },
-  {
-    name: "صف و تسک‌ها",
-    href: "/dashboard/tasks",
-    icon: ListTodo,
+    icon: Network,
   },
 ];
 

@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, Loader2, Lock, Mail } from "lucide-react";
 import { useTheme } from "next-themes";
+import Image from "next/image";
 
 // Form validation schema
 type FormSchema = z.infer<typeof loginFormSchema>;
@@ -33,9 +34,22 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [captchaId, setCaptchaId] = useState("");
+  const [captchaImage, setCaptchaImage] = useState("");
+
+  const fetchCaptcha = async () => {
+    try {
+      const res = await api.get("/api/v1/captcha/");
+      setCaptchaId(res.data.captcha_id);
+      setCaptchaImage(res.data.image_base64);
+    } catch (err) {
+      console.error("Failed to load captcha", err);
+    }
+  };
 
   useEffect(() => {
     setMounted(true);
+    fetchCaptcha();
   }, []);
 
   const form = useForm<FormSchema>({
@@ -43,6 +57,7 @@ export default function LoginPage() {
     defaultValues: {
       username: "",
       password: "",
+      captcha_solution: "",
     },
   });
 
@@ -55,6 +70,8 @@ export default function LoginPage() {
       const formData = new URLSearchParams();
       formData.append("username", values.username);
       formData.append("password", values.password);
+      formData.append("captcha_id", captchaId);
+      formData.append("captcha_solution", values.captcha_solution);
 
       console.log("Sending login request with:", {
         url: `${api.defaults.baseURL || 'http://localhost:8001'}/api/v1/auth/login`,
@@ -136,6 +153,9 @@ export default function LoginPage() {
       } else {
         setError("خطای غیر منتظره");
       }
+      // Refresh captcha on error
+      fetchCaptcha();
+      form.setValue("captcha_solution", "");
     } finally {
       setIsLoading(false);
     }
@@ -146,26 +166,15 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 flex items-center justify-center p-4">
-      {/* Background decoration */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob" />
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000" />
-      </div>
-
-      {/* Login Card */}
-      <div className="w-full max-w-md relative z-10">
+    <div className="w-full max-w-md relative z-10 p-4">
         {/* Logo/Title */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-600 rounded-lg mb-4">
-            <Lock className="w-6 h-6 text-white" />
-          </div>
-          <h1 className="text-3xl font-bold text-white mb-2">Request Admin</h1>
+          <h1 className="text-3xl font-bold text-white mb-2">سامانه صیاد</h1>
           <p className="text-gray-400">پنل مدیریت شبکه درخواست</p>
         </div>
 
         {/* Form Card */}
-        <div className="bg-gray-800 dark:bg-gray-900 rounded-lg shadow-xl p-8 border border-gray-700">
+        <div className="bg-gray-900/60 backdrop-blur-md rounded-lg shadow-2xl p-8 border border-gray-700/50">
           {error && (
             <Alert variant="destructive" className="mb-6 bg-red-900/20 border-red-800">
               <AlertCircle className="h-4 w-4" />
@@ -223,6 +232,53 @@ export default function LoginPage() {
                 )}
               />
 
+              {/* Captcha Field */}
+              <FormField
+                control={form.control}
+                name="captcha_solution"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-gray-200">کد امنیتی</FormLabel>
+                    <div className="flex gap-2">
+                      <FormControl>
+                        <Input
+                          placeholder="کد تصویر را وارد کنید"
+                          {...field}
+                          disabled={isLoading}
+                          className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-400 focus:border-blue-500"
+                          dir="ltr"
+                        />
+                      </FormControl>
+                      <div className="flex items-center gap-2 bg-gray-700 rounded-md p-1 border border-gray-600">
+                        {captchaImage ? (
+                          <img
+                            src={captchaImage}
+                            alt="captcha"
+                            className="h-10 w-[140px] rounded object-cover cursor-pointer"
+                            onClick={fetchCaptcha}
+                          />
+                        ) : (
+                          <div className="h-10 w-[140px] bg-gray-800 flex items-center justify-center animate-pulse rounded">
+                            ...
+                          </div>
+                        )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={fetchCaptcha}
+                          disabled={isLoading}
+                          className="h-10 w-10 text-gray-400 hover:text-white"
+                        >
+                          <Loader2 className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                        </Button>
+                      </div>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               {/* Submit Button */}
               <Button
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white mt-6"
@@ -246,14 +302,6 @@ export default function LoginPage() {
             <p>برای دسترسی به پنل مدیریت، اطلاعات خود را وارد کنید</p>
           </div>
         </div>
-
-        {/* Info Box */}
-        <div className="mt-6 bg-blue-900/20 border border-blue-800 rounded-lg p-4">
-          <p className="text-sm text-blue-200">
-            💡 <strong>نکته:</strong> برای تست، از اطلاعات ادمین پیش‌فرض استفاده کنید
-          </p>
-        </div>
-      </div>
     </div>
   );
 }

@@ -42,7 +42,7 @@ export default function SettingsPage() {
             const result = await api.get(`/api/v1/admin/imports/config/${type}`);
             if (result.data) {
                 setConfig({
-                    storage_type: result.data.storage_type || "local",
+                    storage_type: result.data.storage_type || result.data.destination_type || "local",
                     enabled: result.data.enabled || false,
                     format: result.data.format || "json",
                     local_path: result.data.local_path || "./imports",

@@ -11,11 +11,14 @@ async def global_exception_handler(request: Request, exc: Exception):
     Logs the exception with traceback and returns a standardized 500 error response.
     """
     request_id = getattr(request.state, "request_id", "N/A")
+    import traceback
+    traceback.print_exc()
     log.error(
         "An unhandled exception occurred",
-        exc_info=True,
+        exc_info=False,
         method=request.method,
         url=str(request.url),
+        exc_str=str(exc)
     )
     return JSONResponse(
         status_code=500,

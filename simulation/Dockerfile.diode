@@ -1,0 +1,7 @@
+FROM alpine:latest
+
+WORKDIR /app
+COPY diode-sync.sh /app/diode-sync.sh
+RUN chmod +x /app/diode-sync.sh
+
+CMD ["/app/diode-sync.sh"]

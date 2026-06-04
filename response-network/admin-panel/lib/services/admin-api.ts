@@ -207,6 +207,11 @@ export const statsService = {
     const response = await api.get("/api/v1/monitoring/request-stats");
     return response.data;
   },
+
+  async getSyncStatus() {
+    const response = await api.get("/api/v1/admin/sync-status");
+    return response.data;
+  },
 };
 
 // ============================================================================
@@ -645,6 +650,30 @@ export const adminTasksService = {
 };
 
 // ============================================================================
+// Celery Schedules Service
+// ============================================================================
+
+export interface CelerySchedule {
+  name: string;
+  task: string;
+  interval: number | null;
+  enabled: boolean;
+}
+
+export const celerySchedulesService = {
+  async getSchedules(): Promise<CelerySchedule[]> {
+    const response = await api.get("/api/v1/admin/celery/schedules");
+    return response.data;
+  },
+
+  async updateSchedule(name: string, interval: number): Promise<{ message: string }> {
+    const response = await api.put(`/api/v1/admin/celery/schedules/${name}`, { interval });
+    return response.data;
+  },
+};
+
+
+// ============================================================================
 // Storage Config Service (Multiple Operation Types)
 // ============================================================================
 
@@ -855,6 +884,7 @@ const adminApi = {
   profileTypeService,
   workerService,
   adminTasksService,
+  celerySchedulesService,
   exportConfigService,
   storageConfigService,
   externalApiService,

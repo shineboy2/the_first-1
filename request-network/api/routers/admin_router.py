@@ -295,3 +295,52 @@ async def get_sync_status(
             status[key] = {"status": "No data received"}
 
     return status
+
+from pydantic import BaseModel
+class ScheduleUpdate(BaseModel):
+    interval: float
+
+@router.get("/celery/schedules")
+async def get_celery_schedules(
+    _: Annotated[None, Depends(require_admin)] = None
+):
+    """
+    Get all Celery Beat schedules from RedBeat.
+    """
+    from redbeat import RedBeatSchedulerEntry
+    from workers.celery_app import celery_app
+    
+    entries = RedBeatSchedulerEntry.get_schedules(app=celery_app)
+    schedules = []
+    for key, entry in entries.items():
+        schedules.append({
+            "name": entry.name,
+            "task": entry.task,
+            "interval": entry.schedule.run_every.total_seconds() if hasattr(entry.schedule, "run_every") else None,
+            "enabled": True  # Redbeat removes disabled ones by default if we don't save them
+        })
+    return schedules
+
+@router.put("/celery/schedules/{name}")
+async def update_celery_schedule(
+    name: str,
+    update_data: ScheduleUpdate,
+    _: Annotated[None, Depends(require_admin)] = None
+):
+    """
+    Update a Celery Beat schedule interval.
+    """
+    from redbeat import RedBeatSchedulerEntry
+    from workers.celery_app import celery_app
+    from fastapi import HTTPException
+    
+    entries = RedBeatSchedulerEntry.get_schedules(app=celery_app)
+    if name not in entries:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+        
+    entry = entries[name]
+    from celery.schedules import schedule
+    entry.schedule = schedule(run_every=update_data.interval)
+    entry.save()
+    
+    return {"message": "Schedule updated successfully", "name": name, "interval": update_data.interval}

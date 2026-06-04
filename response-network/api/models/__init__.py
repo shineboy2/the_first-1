@@ -13,6 +13,7 @@ from .profile_type_request_access import ProfileTypeRequestAccess
 from .system_log import SystemLog
 from .system_metrics import SystemMetrics
 from .external_api import ExternalAPI
+from .sync_history import SyncHistory
 
 __all__ = [
     "User",
@@ -30,4 +31,5 @@ __all__ = [
     "SystemLog",
     "SystemMetrics",
     "ExternalAPI",
+    "SyncHistory",
 ]

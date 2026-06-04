@@ -23,6 +23,10 @@ celery_app.conf.update(
     worker_max_tasks_per_child=1000,
     # Ensure tasks stay in queue if worker goes down
     result_expires=3600,  # 1 hour
+    # RedBeat configuration for dynamic scheduling
+    redbeat_redis_url=settings.CELERY_BROKER_URL,
+    beat_scheduler='redbeat.RedBeatScheduler',
+    beat_max_loop_interval=5,
 )
 
 # Auto-discover tasks BEFORE setting beat_schedule
@@ -39,42 +43,26 @@ from workers.tasks.execute_query import execute_pending_queries
 from workers.tasks.users_exporter import export_users_to_request_network
 from workers.tasks.cleanup import cleanup_old_files
 
-# Celery Beat schedule for the Response Network
-celery_app.conf.beat_schedule = {
-    # Export users to request-network every 5 minutes
-    "export-users-every-5min": {
-        "task": "workers.tasks.users_exporter.export_users_to_request_network",
-        "schedule": 300.0,  # هر 300 ثانیه (5 دقیقه)
-    },
-    # Import requests from request-network every 10 seconds (polling)
-    "import-requests-from-request-network": {
-        "task": "workers.tasks.import_requests.import_requests_from_request_network",
-        "schedule": 10.0,  # هر 10 ثانیه
-    },
-    # Export results to request-network every 10 seconds
-    "export-results-to-request-network": {
-        "task": "workers.tasks.export_results.export_completed_results",
-        "schedule": 10.0,  # هر 10 ثانیه
-    },
-    # Export request types to request-network every 60 seconds
-    "export-request-types-every-minute": {
-        "task": "workers.tasks.request_types_exporter.export_request_types_to_request_network",
-        "schedule": 60.0,
-    },
+from celery.signals import beat_init
 
-    # System monitoring every 5 minutes
-    # "system-monitoring-every-5min": {
-    #     "task": "workers.tasks.system_monitoring.system_health_check",
-    #     "schedule": 300.0,  # هر 300 ثانیه (5 دقیقه)
-    # },
-    # Execute pending queries every 10 seconds
-    "execute-pending-queries": {
-        "task": "workers.tasks.execute_query.execute_pending_queries",
-        "schedule": 10.0,
-    },
-    # Cleanup old files daily at 02:00 AM
-    "cleanup-old-files-daily": {
-        "task": "cleanup.cleanup_old_files",
-        "schedule": 86400.0,  # هر 24 ساعت (روزانه)
-    }
-}
+@beat_init.connect
+def setup_redbeat_tasks(sender, **kwargs):
+    from redbeat import RedBeatSchedulerEntry
+    
+    # Define default tasks
+    tasks = [
+        ("export-users-every-5min", "workers.tasks.users_exporter.export_users_to_request_network", 300.0),
+        ("import-requests-from-request-network", "workers.tasks.import_requests.import_requests_from_request_network", 10.0),
+        ("export-results-to-request-network", "workers.tasks.export_results.export_completed_results", 10.0),
+        ("export-request-types-every-minute", "workers.tasks.request_types_exporter.export_request_types_to_request_network", 60.0),
+        ("execute-pending-queries", "workers.tasks.execute_query.execute_pending_queries", 10.0),
+        ("cleanup-old-files-daily", "cleanup.cleanup_old_files", 86400.0),
+    ]
+    
+    for name, task, interval in tasks:
+        try:
+            entry = RedBeatSchedulerEntry(name, task, interval, app=sender.app)
+            entry.save()
+            print(f"RedBeat: Seeded task {name} with interval {interval}s")
+        except Exception as e:
+            print(f"RedBeat Error: Failed to seed task {name}: {e}")

@@ -160,8 +160,8 @@ export default function UsersPage() {
           bValue = new Date(b.created_at).getTime();
           break;
         case "role":
-          aValue = a.is_superuser ? 1 : 0;
-          bValue = b.is_superuser ? 1 : 0;
+          aValue = a.profile_type === "admin" ? 1 : 0;
+          bValue = b.profile_type === "admin" ? 1 : 0;
           break;
         default:
           return 0;
@@ -354,7 +354,8 @@ export default function UsersPage() {
                       filteredUsers.map((user) => (
                         <TableRow key={user.id}>
                           <TableCell className="font-medium">
-                            {user.username}
+                            <div>{user.username}</div>
+                            <div className="font-mono text-[10px] text-muted-foreground mt-1 select-all">{user.id}</div>
                           </TableCell>
                           <TableCell>{user.email}</TableCell>
                           <TableCell>{user.full_name || "-"}</TableCell>
@@ -373,15 +374,15 @@ export default function UsersPage() {
                           <TableCell className="text-center">
                             <Badge
                               variant={
-                                user.is_superuser ? "default" : "secondary"
+                                user.profile_type === "admin" ? "default" : "secondary"
                               }
                               className={
-                                user.is_superuser
+                                user.profile_type === "admin"
                                   ? "bg-purple-100 text-purple-800 hover:bg-purple-100 dark:bg-purple-900 dark:text-purple-200"
                                   : "bg-gray-100 text-gray-800 hover:bg-gray-100 dark:bg-gray-900 dark:text-gray-200"
                               }
                             >
-                              {user.is_superuser ? "ادمین" : "کاربر"}
+                              {user.profile_type === "admin" ? "ادمین" : "کاربر"}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-center" dir="ltr">
