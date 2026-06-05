@@ -228,6 +228,7 @@ export default function RequestTypesPage() {
                                         <TableRow>
                                             <TableHead className="text-right">نام</TableHead>
                                             <TableHead className="text-right">توضیحات</TableHead>
+                                            <TableHead className="text-center">روش اجرا</TableHead>
                                             <TableHead className="text-center">وضعیت</TableHead>
                                             <TableHead className="text-center">تاریخ ایجاد</TableHead>
                                             <TableHead className="text-center">عملیات</TableHead>
@@ -239,6 +240,24 @@ export default function RequestTypesPage() {
                                                 <TableRow key={rt.id}>
                                                     <TableCell className="font-medium">{rt.name}</TableCell>
                                                     <TableCell>{rt.description || "-"}</TableCell>
+                                                    <TableCell className="text-center">
+                                                        <Badge
+                                                            variant="outline"
+                                                            className={
+                                                                (rt as any).execution_method === "file_request"
+                                                                    ? "border-purple-300 text-purple-700 dark:border-purple-600 dark:text-purple-300"
+                                                                    : (rt as any).execution_method === "external_api"
+                                                                        ? "border-blue-300 text-blue-700 dark:border-blue-600 dark:text-blue-300"
+                                                                        : "border-gray-300 text-gray-700 dark:border-gray-600 dark:text-gray-300"
+                                                            }
+                                                        >
+                                                            {(rt as any).execution_method === "file_request"
+                                                                ? "درخواست فایلی"
+                                                                : (rt as any).execution_method === "external_api"
+                                                                    ? "API خارجی"
+                                                                    : "Elasticsearch"}
+                                                        </Badge>
+                                                    </TableCell>
                                                     <TableCell className="text-center">
                                                         <Badge
                                                             variant={rt.is_active ? "default" : "secondary"}
@@ -309,7 +328,7 @@ export default function RequestTypesPage() {
                                             ))
                                         ) : (
                                             <TableRow>
-                                                <TableCell colSpan={5} className="text-center py-8">
+                                                <TableCell colSpan={6} className="text-center py-8">
                                                     <p className="text-muted-foreground">
                                                         هیچ نوع درخواستی یافت نشد
                                                     </p>

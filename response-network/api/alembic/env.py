@@ -25,6 +25,9 @@ from models.request_type_parameter import RequestTypeParameter
 from models.request_access import UserRequestAccess
 from models.profile_type_config import ProfileTypeConfig
 from models.request import Request
+from models.ftp_profile import FTPProfile
+from models.file_request_config import FileRequestConfig
+from models.file_request import FileRequest
 
 # Load our config
 config = context.config

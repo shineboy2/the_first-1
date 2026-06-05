@@ -70,6 +70,42 @@ def execute_pending_queries(self):
                 req.assigned_worker = self.request.id
                 db.commit()
 
+                # Check if it is a file-based request
+                # Look up the RequestType to check execution_method
+                file_req_type = db.query(RequestType).filter(
+                    RequestType.name == req.query_type
+                ).first()
+
+                if file_req_type and file_req_type.execution_method == "file_request":
+                    from models.file_request import FileRequest as FileRequestModel
+                    from workers.tasks.file_request_sender import send_file_request
+
+                    if not file_req_type.file_request_config_id:
+                        raise ValueError(
+                            f"RequestType '{req.query_type}' is configured as file_request "
+                            f"but has no file_request_config_id"
+                        )
+
+                    # Create FileRequest tracker
+                    file_req_obj = FileRequestModel(
+                        id=uuid.uuid4(),
+                        incoming_request_id=req.id,
+                        file_request_config_id=file_req_type.file_request_config_id,
+                        status="generating",
+                    )
+                    db.add(file_req_obj)
+                    db.commit()
+
+                    # Dispatch async file send task
+                    send_file_request.delay(str(file_req_obj.id))
+                    processed_count += 1
+
+                    logger.info(
+                        f"[EXECUTE_QUERY] File request dispatched for {req.id} "
+                        f"(FileRequest: {file_req_obj.id})"
+                    )
+                    continue
+
                 # Check if it is an external API call
                 if req.query_type == "external_api":
                     external_api_name = (req.query_params or {}).get("api_type")

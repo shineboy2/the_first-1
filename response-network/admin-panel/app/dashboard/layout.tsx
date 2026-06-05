@@ -22,6 +22,8 @@ import {
   Database,
   Network,
   Settings as SettingsIcon,
+  HardDrive,
+  FileUp,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 
@@ -65,6 +67,16 @@ const navigation = [
     name: "تنظیمات Elasticsearch",
     href: "/dashboard/elasticsearch-configs",
     icon: Database,
+  },
+  {
+    name: "پروفایل‌های FTP",
+    href: "/dashboard/ftp-profiles",
+    icon: HardDrive,
+  },
+  {
+    name: "درخواست‌های فایلی",
+    href: "/dashboard/file-request-configs",
+    icon: FileUp,
   },
   {
     name: "مدیریت تسک‌ها و ورکرها",

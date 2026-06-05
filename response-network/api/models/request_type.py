@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 
 from sqlalchemy import String, Boolean, ForeignKey, DateTime, JSON
@@ -21,6 +21,19 @@ class RequestType(BaseModel, UUIDMixin, TimestampMixin):
     available_indices: Mapped[List[str]] = mapped_column(ARRAY(String), nullable=False, default=lambda: ["default"])
     elasticsearch_query_template: Mapped[dict] = mapped_column(JSON, nullable=True, default=lambda: {})
 
+    # Execution method: "elasticsearch" (default), "external_api", "file_request"
+    execution_method: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="elasticsearch"
+    )
+    # FK to file_request_configs.id — only when execution_method == "file_request"
+    file_request_config_id: Mapped[Optional[UUID]] = mapped_column(
+        PGUUID, ForeignKey("file_request_configs.id"), nullable=True
+    )
+    # FK to external_apis.id — only when execution_method == "external_api"
+    external_api_id: Mapped[Optional[UUID]] = mapped_column(
+        PGUUID, ForeignKey("external_apis.id"), nullable=True
+    )
+
     created_by_id: Mapped[UUID] = mapped_column(PGUUID, ForeignKey("users.id"), nullable=False, default=None)
     created_by: Mapped["User"] = relationship("User", back_populates="created_request_types")
 
@@ -28,3 +41,5 @@ class RequestType(BaseModel, UUIDMixin, TimestampMixin):
     parameters: Mapped[List["RequestTypeParameter"]] = relationship("RequestTypeParameter", back_populates="request_type", cascade="all, delete-orphan")
     user_access: Mapped[List["UserRequestAccess"]] = relationship("UserRequestAccess", back_populates="request_type")
     profile_access: Mapped[List["ProfileTypeRequestAccess"]] = relationship("ProfileTypeRequestAccess", back_populates="request_type")
+    file_request_config = relationship("FileRequestConfig", foreign_keys=[file_request_config_id])
+    external_api_rel = relationship("ExternalAPI", foreign_keys=[external_api_id])

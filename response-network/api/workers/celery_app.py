@@ -42,6 +42,8 @@ from workers.tasks.system_monitoring import system_health_check
 from workers.tasks.execute_query import execute_pending_queries
 from workers.tasks.users_exporter import export_users_to_request_network
 from workers.tasks.cleanup import cleanup_old_files
+from workers.tasks.file_request_sender import send_file_request
+from workers.tasks.file_request_poller import poll_file_responses
 
 from celery.signals import beat_init
 
@@ -57,6 +59,7 @@ def setup_redbeat_tasks(sender, **kwargs):
         ("export-request-types-every-minute", "workers.tasks.request_types_exporter.export_request_types_to_request_network", 60.0),
         ("execute-pending-queries", "workers.tasks.execute_query.execute_pending_queries", 10.0),
         ("cleanup-old-files-daily", "cleanup.cleanup_old_files", 86400.0),
+        ("poll-file-responses", "workers.tasks.file_request_poller.poll_file_responses", 60.0),
     ]
     
     for name, task, interval in tasks:

@@ -873,6 +873,175 @@ export const elasticsearchConfigService = {
   },
 };
 
+// ============================================================================
+// FTP Profile Service
+// ============================================================================
+
+export interface FTPProfile {
+  id: string;
+  name: string;
+  display_name: string;
+  description: string | null;
+  host: string;
+  port: number;
+  username: string | null;
+  base_path: string;
+  use_tls: boolean;
+  passive_mode: boolean;
+  timeout: number;
+  is_active: boolean;
+  last_tested_at: string | null;
+  last_test_result: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FTPProfileCreate {
+  name: string;
+  display_name: string;
+  description?: string;
+  host: string;
+  port?: number;
+  username?: string;
+  password?: string;
+  base_path?: string;
+  use_tls?: boolean;
+  passive_mode?: boolean;
+  timeout?: number;
+  is_active?: boolean;
+}
+
+export interface FTPProfileTestResult {
+  success: boolean;
+  message: string;
+  can_read: boolean;
+  can_write: boolean;
+  tested_at: string;
+}
+
+export const ftpProfileService = {
+  async getProfiles(): Promise<FTPProfile[]> {
+    const response = await api.get("/api/v1/ftp-profiles/");
+    return response.data;
+  },
+
+  async getProfile(id: string): Promise<FTPProfile> {
+    const response = await api.get(`/api/v1/ftp-profiles/${id}`);
+    return response.data;
+  },
+
+  async createProfile(data: FTPProfileCreate): Promise<FTPProfile> {
+    const response = await api.post("/api/v1/ftp-profiles/", data);
+    return response.data;
+  },
+
+  async updateProfile(id: string, data: Partial<FTPProfileCreate>): Promise<FTPProfile> {
+    const response = await api.patch(`/api/v1/ftp-profiles/${id}`, data);
+    return response.data;
+  },
+
+  async deleteProfile(id: string): Promise<void> {
+    await api.delete(`/api/v1/ftp-profiles/${id}`);
+  },
+
+  async testConnection(id: string): Promise<FTPProfileTestResult> {
+    const response = await api.post(`/api/v1/ftp-profiles/${id}/test`);
+    return response.data;
+  },
+};
+
+// ============================================================================
+// File Request Config Service
+// ============================================================================
+
+export interface FileRequestConfig {
+  id: string;
+  name: string;
+  display_name: string;
+  description: string | null;
+  is_active: boolean;
+  send_ftp_profile_id: string;
+  send_path: string;
+  receive_ftp_profile_id: string;
+  receive_path: string;
+  filename_template: string;
+  content_format: string;
+  content_template: Record<string, any> | null;
+  content_encoding: string;
+  response_parser_config: Record<string, any> | null;
+  response_timeout_minutes: number;
+  max_retries: number;
+  poll_interval_seconds: number;
+  has_error_response: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FileRequestConfigCreate {
+  name: string;
+  display_name: string;
+  description?: string;
+  is_active?: boolean;
+  send_ftp_profile_id: string;
+  send_path?: string;
+  receive_ftp_profile_id: string;
+  receive_path?: string;
+  filename_template: string;
+  content_format?: string;
+  content_template?: Record<string, any>;
+  content_encoding?: string;
+  response_parser_config?: Record<string, any>;
+  response_timeout_minutes?: number;
+  max_retries?: number;
+  poll_interval_seconds?: number;
+  has_error_response?: boolean;
+}
+
+export const fileRequestConfigService = {
+  async getConfigs(): Promise<FileRequestConfig[]> {
+    const response = await api.get("/api/v1/file-request-configs/");
+    return response.data;
+  },
+
+  async getConfig(id: string): Promise<FileRequestConfig> {
+    const response = await api.get(`/api/v1/file-request-configs/${id}`);
+    return response.data;
+  },
+
+  async createConfig(data: FileRequestConfigCreate): Promise<FileRequestConfig> {
+    const response = await api.post("/api/v1/file-request-configs/", data);
+    return response.data;
+  },
+
+  async updateConfig(id: string, data: Partial<FileRequestConfigCreate>): Promise<FileRequestConfig> {
+    const response = await api.patch(`/api/v1/file-request-configs/${id}`, data);
+    return response.data;
+  },
+
+  async deleteConfig(id: string): Promise<void> {
+    await api.delete(`/api/v1/file-request-configs/${id}`);
+  },
+
+  async testParse(data: { sample_json: Record<string, any>; parser_config: Record<string, any> }): Promise<{
+    success: boolean;
+    extracted_data: any;
+    error: string | null;
+    raw_input: Record<string, any>;
+  }> {
+    const response = await api.post("/api/v1/file-request-configs/test-parse", data);
+    return response.data;
+  },
+
+  async testGenerate(configId: string, data: { sample_params: Record<string, any> }): Promise<{
+    generated_filename: string;
+    generated_content: string;
+    content_format: string;
+  }> {
+    const response = await api.post(`/api/v1/file-request-configs/${configId}/test-generate`, data);
+    return response.data;
+  },
+};
+
 const adminApi = {
   healthService,
   statsService,
@@ -889,6 +1058,9 @@ const adminApi = {
   storageConfigService,
   externalApiService,
   elasticsearchConfigService,
+  ftpProfileService,
+  fileRequestConfigService,
 };
 
 export default adminApi;
+

@@ -14,6 +14,9 @@ from .system_log import SystemLog
 from .system_metrics import SystemMetrics
 from .external_api import ExternalAPI
 from .sync_history import SyncHistory
+from .ftp_profile import FTPProfile
+from .file_request_config import FileRequestConfig
+from .file_request import FileRequest
 
 __all__ = [
     "User",
@@ -32,4 +35,8 @@ __all__ = [
     "SystemMetrics",
     "ExternalAPI",
     "SyncHistory",
+    "FTPProfile",
+    "FileRequestConfig",
+    "FileRequest",
 ]
+
