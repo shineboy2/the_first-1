@@ -26,6 +26,8 @@ class UserRead(UserBase):
     max_results_per_request: int
     allowed_indices: list[str]
     allowed_external_apis: list[str]
+    force_password_change: bool
+    allowed_ips: list[str]
 
     class Config:
         from_attributes = True
@@ -37,6 +39,8 @@ class UserCreate(UserBase):
     profile_type: str = "user"
     is_active: bool = True
     is_admin: bool = False
+    force_password_change: bool = False
+    allowed_ips: list[str] = []
 
     @field_validator('profile_type')
     @classmethod
@@ -54,6 +58,8 @@ class UserUpdate(BaseModel):
     password: str | None = None
     profile_type: str | None = None
     allowed_external_apis: list[str] | None = None
+    force_password_change: bool | None = None
+    allowed_ips: list[str] | None = None
 
     @field_validator('profile_type')
     @classmethod

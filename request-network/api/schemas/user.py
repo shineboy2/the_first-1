@@ -24,6 +24,8 @@ class User(UserBase):
     allowed_request_types: Optional[list] = []
     blocked_request_types: Optional[list] = []
     allowed_external_apis: Optional[list] = []
+    force_password_change: bool = False
+    allowed_ips: Optional[list[str]] = []
     
     model_config = ConfigDict(from_attributes=True)
 

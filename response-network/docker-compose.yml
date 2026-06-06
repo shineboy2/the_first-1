@@ -15,10 +15,6 @@ services:
       - POSTGRES_USER=${DB_USER:-response_user}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
       - POSTGRES_DB=${DB_NAME:-response_db}
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -35,10 +31,6 @@ services:
     image: redis:7-alpine
     container_name: response-redis
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
     volumes:
       - redis_data:/data
     networks:
@@ -239,7 +231,7 @@ services:
       - no-new-privileges:true
     command: celery -A workers.celery_app flower --port=5555 --basic_auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin123}
     ports:
-      - "${FLOWER_PORT:-5555}:5555"
+      - "${FLOWER_PORT:-5556}:5555"
     networks:
       - response-net
     depends_on:

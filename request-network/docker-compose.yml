@@ -13,10 +13,6 @@ services:
       - POSTGRES_USER=${DB_USER:-request_user}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
       - POSTGRES_DB=${DB_NAME:-request_db}
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -33,10 +29,6 @@ services:
     image: redis:7-alpine
     container_name: request-redis
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
     volumes:
       - redis_data:/data
     networks:
