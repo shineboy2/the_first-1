@@ -16,7 +16,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY api /app
 
-# Setup directories for exports/imports
+# Setup directories for exports/imports and create non-root user
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
 RUN mkdir -p /app/exports /app/imports /app/shared_data
+RUN chown -R appuser:appgroup /app
+
+USER appuser
 
 EXPOSE 8000

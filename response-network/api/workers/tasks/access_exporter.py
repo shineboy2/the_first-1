@@ -27,6 +27,7 @@ from models.request_access import UserRequestAccess
 from models.profile_type_request_access import ProfileTypeRequestAccess
 from models.request_type import RequestType
 from models.settings import Settings
+from models.ftp_profile import FTPProfile
 
 
 @shared_task
@@ -152,17 +153,25 @@ def export_access_to_request_network():
             }
             
         elif export_type == "ftp":
-            host = config.get("ftp_host")
-            user = config.get("ftp_user")
-            passwd = config.get("ftp_password")
-            port = config.get("ftp_port") or 21
+            ftp_profile_id = config.get("ftp_profile_id")
+            if not ftp_profile_id:
+                return {"status": "error", "reason": "ftp_profile_not_configured"}
+            
+            profile_result = session.execute(
+                select(FTPProfile).where(FTPProfile.id == ftp_profile_id, FTPProfile.is_active == True)
+            )
+            ftp_profile = profile_result.scalar_one_or_none()
+            if not ftp_profile:
+                return {"status": "error", "reason": "ftp_profile_not_found_or_inactive"}
+            
+            host = ftp_profile.host
+            user = ftp_profile.username
+            passwd = ftp_profile.password
+            port = ftp_profile.port or 21
+            use_tls = ftp_profile.use_tls
             remote_path = "/access"  # Fixed path for access exports
-            use_tls = config.get("ftp_use_tls", False)
             
             logger.info(f"Connecting to FTP: {host}:{port}")
-            
-            if not host:
-                return {"status": "error", "reason": "ftp_host_missing"}
             
             try:
                 # Prepare JSON data in memory

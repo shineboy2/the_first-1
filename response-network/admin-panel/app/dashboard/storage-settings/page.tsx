@@ -15,8 +15,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import {
     storageConfigService,
+    ftpProfileService,
     type StorageConfig,
     type OperationType,
+    type FTPProfile,
     OPERATION_LABELS
 } from "@/lib/services/admin-api";
 
@@ -30,6 +32,7 @@ const OPERATION_ICONS: Record<OperationType, typeof Upload> = {
 interface ConfigCardProps {
     operationType: OperationType;
     config: StorageConfig;
+    ftpProfiles: FTPProfile[];
     onSave: (operationType: OperationType, config: Partial<StorageConfig>) => Promise<void>;
     onTest: (operationType: OperationType) => Promise<void>;
     onTestConnection: (operationType: OperationType) => Promise<void>;
@@ -38,7 +41,7 @@ interface ConfigCardProps {
     testingConnection: boolean;
 }
 
-function ConfigCard({ operationType, config, onSave, onTest, onTestConnection, saving, testing, testingConnection }: ConfigCardProps) {
+function ConfigCard({ operationType, config, ftpProfiles, onSave, onTest, onTestConnection, saving, testing, testingConnection }: ConfigCardProps) {
     const [localConfig, setLocalConfig] = useState<StorageConfig>(config);
     const Icon = OPERATION_ICONS[operationType];
     const labels = OPERATION_LABELS[operationType];
@@ -132,48 +135,20 @@ function ConfigCard({ operationType, config, onSave, onTest, onTestConnection, s
                             <span className="font-medium text-sm">تنظیمات FTP</span>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <Label>آدرس سرور</Label>
-                                <Input
-                                    value={localConfig.ftp_host || ''}
-                                    onChange={(e) => setLocalConfig({ ...localConfig, ftp_host: e.target.value })}
-                                    placeholder="192.168.214.139"
-                                    dir="ltr"
-                                />
-                            </div>
-                            <div>
-                                <Label>پورت</Label>
-                                <Input
-                                    type="number"
-                                    value={localConfig.ftp_port || 21}
-                                    onChange={(e) => setLocalConfig({ ...localConfig, ftp_port: parseInt(e.target.value) })}
-                                    placeholder="21"
-                                    dir="ltr"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <Label>نام کاربری</Label>
-                                <Input
-                                    value={localConfig.ftp_user || ''}
-                                    onChange={(e) => setLocalConfig({ ...localConfig, ftp_user: e.target.value })}
-                                    placeholder="ftp_user"
-                                    dir="ltr"
-                                />
-                            </div>
-                            <div>
-                                <Label>رمز عبور</Label>
-                                <Input
-                                    type="password"
-                                    value={localConfig.ftp_password || ''}
-                                    onChange={(e) => setLocalConfig({ ...localConfig, ftp_password: e.target.value })}
-                                    placeholder="••••••••"
-                                    dir="ltr"
-                                />
-                            </div>
+                        <div className="space-y-2">
+                            <Label>پروفایل FTP</Label>
+                            <select
+                                className="w-full rounded-md border border-input bg-background px-3 py-2"
+                                value={localConfig.ftp_profile_id || ""}
+                                onChange={(e) => setLocalConfig({ ...localConfig, ftp_profile_id: e.target.value })}
+                            >
+                                <option value="" disabled>انتخاب پروفایل...</option>
+                                {ftpProfiles.map(profile => (
+                                    <option key={profile.id} value={profile.id}>
+                                        {profile.name} ({profile.host})
+                                    </option>
+                                ))}
+                            </select>
                         </div>
 
                         <div>
@@ -181,18 +156,9 @@ function ConfigCard({ operationType, config, onSave, onTest, onTestConnection, s
                             <Input
                                 value={localConfig.ftp_path || ''}
                                 onChange={(e) => setLocalConfig({ ...localConfig, ftp_path: e.target.value })}
-                                placeholder="users"
+                                placeholder="/exports"
                                 dir="ltr"
                             />
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                            <Switch
-                                id={`${operationType}-tls`}
-                                checked={localConfig.ftp_use_tls || false}
-                                onCheckedChange={(checked) => setLocalConfig({ ...localConfig, ftp_use_tls: checked })}
-                            />
-                            <Label htmlFor={`${operationType}-tls`}>استفاده از TLS/SSL</Label>
                         </div>
                     </div>
                 )}
@@ -243,6 +209,7 @@ function ConfigCard({ operationType, config, onSave, onTest, onTestConnection, s
 export default function StorageSettingsPage() {
     const router = useRouter();
     const [configs, setConfigs] = useState<StorageConfig[]>([]);
+    const [ftpProfiles, setFtpProfiles] = useState<FTPProfile[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
@@ -258,8 +225,12 @@ export default function StorageSettingsPage() {
         try {
             setLoading(true);
             setError(null);
-            const data = await storageConfigService.getAllConfigs();
+            const [data, profiles] = await Promise.all([
+                storageConfigService.getAllConfigs(),
+                ftpProfileService.getProfiles()
+            ]);
             setConfigs(Array.isArray(data) ? data : []);
+            setFtpProfiles(Array.isArray(profiles) ? profiles : []);
         } catch (err) {
             console.error("Error fetching configs:", err);
             setError("خطا در دریافت تنظیمات");
@@ -405,6 +376,7 @@ export default function StorageSettingsPage() {
                             <ConfigCard
                                 operationType="user_export"
                                 config={getConfig('user_export')}
+                                ftpProfiles={ftpProfiles}
                                 onSave={handleSave}
                                 onTest={handleTest}
                                 onTestConnection={handleTestConnection}
@@ -418,6 +390,7 @@ export default function StorageSettingsPage() {
                             <ConfigCard
                                 operationType="request_types_export"
                                 config={getConfig('request_types_export')}
+                                ftpProfiles={ftpProfiles}
                                 onSave={handleSave}
                                 onTest={handleTest}
                                 onTestConnection={handleTestConnection}
@@ -431,6 +404,7 @@ export default function StorageSettingsPage() {
                             <ConfigCard
                                 operationType="result_export"
                                 config={getConfig('result_export')}
+                                ftpProfiles={ftpProfiles}
                                 onSave={handleSave}
                                 onTest={handleTest}
                                 onTestConnection={handleTestConnection}
@@ -444,6 +418,7 @@ export default function StorageSettingsPage() {
                             <ConfigCard
                                 operationType="request_import"
                                 config={getConfig('request_import')}
+                                ftpProfiles={ftpProfiles}
                                 onSave={handleSave}
                                 onTest={handleTest}
                                 onTestConnection={handleTestConnection}

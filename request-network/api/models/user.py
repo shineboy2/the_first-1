@@ -44,6 +44,15 @@ class User(BaseModel):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     synced_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Security Fields (Phase 1)
+    failed_login_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default='0')
+    locked_until: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_login_ip: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    last_login_date: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    force_password_change: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default='false')
+    allowed_ips: Mapped[list] = mapped_column(JSONB, nullable=False, server_default='[]')
+    password_changed_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     # Relationship to requests
     requests: Mapped[list["Request"]] = relationship("Request", back_populates="user", cascade="all, delete-orphan")
 

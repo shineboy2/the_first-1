@@ -13,6 +13,8 @@ export interface User {
   is_active: boolean;
   is_superuser?: boolean;
   full_name?: string;
+  force_password_change?: boolean;
+  allowed_ips?: string[];
   created_at: string;
   last_login: string | null;
 }
@@ -685,12 +687,8 @@ export interface StorageConfig {
   format: string;
   destination_type: 'local' | 'ftp';
   local_path?: string;
-  ftp_host?: string;
-  ftp_port?: number;
-  ftp_user?: string;
-  ftp_password?: string;
+  ftp_profile_id?: string;
   ftp_path?: string;
-  ftp_use_tls?: boolean;
   schedule?: string;
   configured?: boolean;
 }

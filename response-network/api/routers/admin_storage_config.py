@@ -12,6 +12,7 @@ from auth.dependencies import get_current_admin_user
 from db.session import get_db_session
 from models.user import User as UserModel
 from models.settings import Settings as SettingsModel
+from models.ftp_profile import FTPProfile
 
 router = APIRouter(tags=["admin-exports"])
 
@@ -34,12 +35,8 @@ class StorageConfig(BaseModel):
     format: str = "json"
     destination_type: str = "local"  # local or ftp
     local_path: Optional[str] = None
-    ftp_host: Optional[str] = None
-    ftp_port: Optional[int] = None
-    ftp_user: Optional[str] = None
-    ftp_password: Optional[str] = None
+    ftp_profile_id: Optional[str] = None
     ftp_path: Optional[str] = None
-    ftp_use_tls: Optional[bool] = False
     configured: bool = False
 
 
@@ -134,12 +131,8 @@ async def update_config(
         "format": config_data.format,
         "storage_type": config_data.destination_type,  # Workers expect storage_type
         "local_path": config_data.local_path,
-        "ftp_host": config_data.ftp_host,
-        "ftp_port": config_data.ftp_port,
-        "ftp_user": config_data.ftp_user,
-        "ftp_password": config_data.ftp_password,
+        "ftp_profile_id": config_data.ftp_profile_id,
         "ftp_path": config_data.ftp_path,
-        "ftp_use_tls": config_data.ftp_use_tls,
     }
     
     # Get or create the setting
@@ -217,13 +210,31 @@ async def test_operation(
     
     elif dest_type == "ftp":
         try:
-            from ftplib import FTP
-            ftp_host = config.get("ftp_host")
-            ftp_port = config.get("ftp_port") or 21  # Handle None values
-            ftp_user = config.get("ftp_user")
-            ftp_password = config.get("ftp_password")
+            ftp_profile_id = config.get("ftp_profile_id")
+            if not ftp_profile_id:
+                return {
+                    "success": False,
+                    "message": "FTP Profile is not configured"
+                }
             
-            use_tls = config.get("ftp_use_tls", False)
+            # Fetch FTP Profile
+            profile_result = await db.execute(
+                select(FTPProfile).where(FTPProfile.id == ftp_profile_id, FTPProfile.is_active == True)
+            )
+            ftp_profile = profile_result.scalar_one_or_none()
+            
+            if not ftp_profile:
+                return {
+                    "success": False,
+                    "message": "FTP Profile not found or is inactive"
+                }
+            
+            from ftplib import FTP
+            ftp_host = ftp_profile.host
+            ftp_port = ftp_profile.port or 21
+            ftp_user = ftp_profile.username
+            ftp_password = ftp_profile.password
+            use_tls = ftp_profile.use_tls
             
             if use_tls:
                 from ftplib import FTP_TLS

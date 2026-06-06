@@ -1,10 +1,12 @@
-from datetime import timedelta
+from datetime import timedelta, datetime, timezone
 from typing import Annotated
 import sys
 from pathlib import Path
+import structlog
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -14,14 +16,21 @@ if str(_api_dir) not in sys.path:
     sys.path.insert(0, str(_api_dir))
 
 # Import directly from Request Network auth
-from auth.security import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
+from auth.security import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, blocklist_token, redis_client
 from auth.schemas import Token
+from auth.dependencies import get_current_user
 from db.session import get_db_session
 from models.user import User
+from models.audit_log import AuditLog
 from routers.captcha_router import verify_captcha
+from core.config import settings
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+log = structlog.get_logger(__name__)
 
+# Constants for lockout
+MAX_FAILED_ATTEMPTS = 5
+LOCKOUT_MINUTES = 15
 
 @router.post("/login", response_model=Token)
 async def login_for_access_token(
@@ -30,12 +39,14 @@ async def login_for_access_token(
 ):
     """
     Authenticates a user and returns a JWT access token.
+    Includes security checks: Lockout, audit logging, concurrent session prevention.
     """
     form_data = await request.form()
     username = form_data.get("username")
     password = form_data.get("password")
     captcha_id = form_data.get("captcha_id")
     captcha_solution = form_data.get("captcha_solution")
+    client_ip = request.client.host if request.client else "unknown"
 
     if not username or not password:
         raise HTTPException(
@@ -63,15 +74,72 @@ async def login_for_access_token(
     result = await db.execute(query)
     user = result.scalar_one_or_none()
 
-    # 2. Check if user exists and password is correct
-    if not user or not user.verify_password(password):
+    # If user doesn't exist, we don't want to leak this information, but we log it
+    if not user:
+        await _log_audit(db, None, "LOGIN_FAILED", client_ip, request, {"reason": "user_not_found", "attempted_username": username})
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # 3. Create the access token
+    # 2. Check if locked out
+    now = datetime.now(timezone.utc)
+    if user.locked_until and user.locked_until > now:
+        await _log_audit(db, user.id, "LOGIN_BLOCKED", client_ip, request, {"reason": "account_locked"})
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Account is locked. Try again later.",
+        )
+
+    # 3. Check password
+    if not user.verify_password(password):
+        # Increment failed attempts
+        user.failed_login_attempts += 1
+        if user.failed_login_attempts >= MAX_FAILED_ATTEMPTS:
+            user.locked_until = now + timedelta(minutes=LOCKOUT_MINUTES)
+            user.failed_login_attempts = 0 # Reset counter after locking
+            await _log_audit(db, user.id, "ACCOUNT_LOCKED", client_ip, request, {"reason": "max_failed_attempts"})
+        else:
+            await _log_audit(db, user.id, "LOGIN_FAILED", client_ip, request, {"reason": "invalid_password"})
+        
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # 4. Success Login - Reset counters & update info
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    user.last_login_ip = client_ip
+    user.last_login_date = now
+    
+    # Check IP restriction (Fallback to allow if not set, as per user request)
+    if user.allowed_ips and client_ip not in user.allowed_ips:
+        await _log_audit(db, user.id, "LOGIN_BLOCKED", client_ip, request, {"reason": "ip_not_allowed", "ip": client_ip})
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Login not permitted from this IP address.",
+        )
+
+    await db.commit()
+    await _log_audit(db, user.id, "LOGIN_SUCCESS", client_ip, request)
+
+    # 5. Handle Concurrent Sessions (Invalidate previous active session for this user)
+    # We store the latest token JTI (or just a marker) in Redis. 
+    # For simplicity, we just mark the user as having a new session. 
+    # A better way is storing the active token and blocklisting it.
+    old_session_key = f"active_session:{user.id}"
+    try:
+        old_token = redis_client.get(old_session_key)
+        if old_token:
+            blocklist_token(old_token)
+    except Exception as e:
+        log.warning("Could not invalidate old session in Redis", error=str(e))
+
+    # 6. Create the access token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={
@@ -82,4 +150,51 @@ async def login_for_access_token(
         expires_delta=access_token_expires,
     )
 
+    # Save new active session
+    try:
+        redis_client.setex(old_session_key, int(access_token_expires.total_seconds()), access_token)
+    except Exception:
+        pass
+
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.post("/logout")
+async def logout(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """
+    Logs out the user by blocklisting the current JWT token.
+    """
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+        blocklist_token(token)
+        
+        # Remove active session marker
+        try:
+            redis_client.delete(f"active_session:{current_user.id}")
+        except Exception:
+            pass
+            
+    client_ip = request.client.host if request.client else "unknown"
+    await _log_audit(db, current_user.id, "LOGOUT", client_ip, request)
+    return {"message": "Successfully logged out"}
+
+
+async def _log_audit(db: AsyncSession, user_id: uuid.UUID | None, action: str, ip: str, request: Request, meta: dict = None):
+    try:
+        log_entry = AuditLog(
+            user_id=user_id,
+            action=action,
+            ip_address=ip,
+            user_agent=request.headers.get("user-agent", "unknown"),
+            meta=meta or {}
+        )
+        db.add(log_entry)
+        await db.commit()
+    except Exception as e:
+        log.error("Failed to write audit log", action=action, error=str(e))
+        await db.rollback()

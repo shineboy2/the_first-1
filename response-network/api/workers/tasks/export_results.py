@@ -11,11 +11,14 @@ from celery import shared_task
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from core.encryption import encrypt_data
+
 from core.config import settings
 from models.incoming_request import IncomingRequest
 from models.query_result import QueryResult
 from models.settings import Settings as SettingsModel
 from models.sync_history import SyncHistory
+from models.ftp_profile import FTPProfile
 
 logger = logging.getLogger(__name__)
 
@@ -111,23 +114,32 @@ def export_completed_results(self):
                 local_path.mkdir(parents=True, exist_ok=True)
             
             file_path = local_path / filename
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(jsonl_content)
+            encrypted_bytes = encrypt_data(jsonl_content.encode('utf-8'))
+            with open(file_path, "wb") as f:
+                f.write(encrypted_bytes)
             saved_path = str(file_path)
             logger.info(f"Exported results locally to {saved_path}")
 
         elif export_type == "ftp":
-            host = export_config.get("ftp_host")
-            user = export_config.get("ftp_user")
-            passwd = export_config.get("ftp_password")
-            port = export_config.get("ftp_port") or 21
-            remote_path = export_config.get("ftp_path", "/results")
-            use_tls = export_config.get("ftp_use_tls", False)
+            ftp_profile_id = export_config.get("ftp_profile_id")
+            if not ftp_profile_id:
+                raise ValueError("FTP Profile not configured")
             
-            if not host:
-                raise ValueError("FTP host not configured")
+            ftp_profile = db.query(FTPProfile).filter(
+                FTPProfile.id == ftp_profile_id, FTPProfile.is_active == True
+            ).first()
+            if not ftp_profile:
+                raise ValueError("FTP Profile not found or inactive")
+                
+            host = ftp_profile.host
+            user = ftp_profile.username
+            passwd = ftp_profile.password
+            port = ftp_profile.port or 21
+            remote_path = export_config.get("ftp_path", "/results")
+            use_tls = ftp_profile.use_tls
 
-            bio = io.BytesIO(jsonl_content.encode('utf-8'))
+            encrypted_bytes = encrypt_data(jsonl_content.encode('utf-8'))
+            bio = io.BytesIO(encrypted_bytes)
             
             if use_tls:
                 ftp = ftplib.FTP_TLS()

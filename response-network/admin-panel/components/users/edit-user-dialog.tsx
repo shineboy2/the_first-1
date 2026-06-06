@@ -42,6 +42,8 @@ const editUserSchema = z.object({
     daily_request_limit: z.number().min(1).optional(),
     monthly_request_limit: z.number().min(1).optional(),
     is_active: z.boolean().optional(),
+    force_password_change: z.boolean().optional(),
+    allowed_ips_str: z.string().optional(),
 });
 
 type EditUserFormData = z.infer<typeof editUserSchema>;
@@ -72,6 +74,8 @@ export function EditUserDialog({
             daily_request_limit: 1000,
             monthly_request_limit: 10000,
             is_active: true,
+            force_password_change: false,
+            allowed_ips_str: "",
         },
     });
 
@@ -102,6 +106,8 @@ export function EditUserDialog({
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 monthly_request_limit: (user as any).monthly_request_limit || 10000,
                 is_active: user.is_active,
+                force_password_change: user.force_password_change || false,
+                allowed_ips_str: (user.allowed_ips || []).join(", "),
             });
         }
     }, [user, form]);
@@ -111,7 +117,15 @@ export function EditUserDialog({
 
         try {
             setIsLoading(true);
-            await userService.updateUser(user.id, data);
+            const submitData = {
+                ...data,
+                allowed_ips: data.allowed_ips_str ? data.allowed_ips_str.split(",").map(ip => ip.trim()).filter(Boolean) : []
+            };
+            // Remove the helper string field before sending
+            // @ts-ignore
+            delete submitData.allowed_ips_str;
+
+            await userService.updateUser(user.id, submitData);
             onSuccess();
             onOpenChange(false);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -289,6 +303,44 @@ export function EditUserDialog({
                                             onCheckedChange={field.onChange}
                                         />
                                     </FormControl>
+                                </FormItem>
+                            )}
+                        />
+
+                        <FormField
+                            control={form.control}
+                            name="force_password_change"
+                            render={({ field }) => (
+                                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-900/10">
+                                    <div className="space-y-0.5">
+                                        <FormLabel className="text-base">اجبار به تغییر رمز عبور</FormLabel>
+                                        <FormDescription>
+                                            کاربر در ورود بعدی مجبور به تغییر رمز خواهد شد
+                                        </FormDescription>
+                                    </div>
+                                    <FormControl>
+                                        <Switch
+                                            checked={field.value}
+                                            onCheckedChange={field.onChange}
+                                        />
+                                    </FormControl>
+                                </FormItem>
+                            )}
+                        />
+
+                        <FormField
+                            control={form.control}
+                            name="allowed_ips_str"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>آدرس‌های IP مجاز (با کاما جدا کنید)</FormLabel>
+                                    <FormControl>
+                                        <Input placeholder="192.168.1.1, 10.0.0.1" {...field} />
+                                    </FormControl>
+                                    <FormDescription>
+                                        خالی گذاشتن به معنی دسترسی از همه IPها است.
+                                    </FormDescription>
+                                    <FormMessage />
                                 </FormItem>
                             )}
                         />

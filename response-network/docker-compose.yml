@@ -15,6 +15,10 @@ services:
       - POSTGRES_USER=${DB_USER:-response_user}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
       - POSTGRES_DB=${DB_NAME:-response_db}
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -31,6 +35,10 @@ services:
     image: redis:7-alpine
     container_name: response-redis
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - redis_data:/data
     networks:
@@ -77,6 +85,10 @@ services:
       - FTP_USE_TLS=${FTP_USE_TLS:-false}
       - SHARED_DATA_DIR=/app/shared_data
       - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS}
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     command: uvicorn main:app --host 0.0.0.0 --port 8000
     ports:
       - "${API_PORT:-8000}:8000"
@@ -104,6 +116,10 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://192.168.214.141:8000}
       - NODE_ENV=production
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "${ADMIN_PORT:-3000}:3000"
     networks:
@@ -137,6 +153,10 @@ services:
       - FTP_PASSWORD=${FTP_PASSWORD}
       - FTP_USE_TLS=${FTP_USE_TLS:-false}
       - SHARED_DATA_DIR=/app/shared_data
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     command: celery -A workers.celery_app worker -l info --concurrency=4
     volumes:
       - shared_data:/app/shared_data
@@ -176,6 +196,10 @@ services:
       - FTP_PASSWORD=${FTP_PASSWORD}
       - FTP_USE_TLS=${FTP_USE_TLS:-false}
       - SHARED_DATA_DIR=/app/shared_data
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     command: celery -A workers.celery_app beat -l info
     volumes:
       - shared_data:/app/shared_data
@@ -209,6 +233,10 @@ services:
       - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/1
       - FLOWER_PORT=5555
       - FLOWER_BASIC_AUTH=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin123}
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     command: celery -A workers.celery_app flower --port=5555 --basic_auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin123}
     ports:
       - "${FLOWER_PORT:-5555}:5555"

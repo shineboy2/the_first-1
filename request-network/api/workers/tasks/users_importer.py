@@ -137,6 +137,8 @@ def import_users_from_response_network(self):
                     existing_user.daily_request_limit = user_data.get("daily_request_limit", 100)
                     existing_user.monthly_request_limit = user_data.get("monthly_request_limit", 2000)
                     existing_user.priority = user_data.get("priority", 5)
+                    existing_user.force_password_change = user_data.get("force_password_change", False)
+                    existing_user.allowed_ips = user_data.get("allowed_ips", [])
                     updated_count += 1
                 else:
                     # Create new user
@@ -156,7 +158,9 @@ def import_users_from_response_network(self):
                         rate_limit_per_day=user_data.get("rate_limit_per_day", 500),
                         daily_request_limit=user_data.get("daily_request_limit", 100),
                         monthly_request_limit=user_data.get("monthly_request_limit", 2000),
-                        priority=user_data.get("priority", 5)
+                        priority=user_data.get("priority", 5),
+                        force_password_change=user_data.get("force_password_change", False),
+                        allowed_ips=user_data.get("allowed_ips", [])
                     )
                     db.add(new_user)
                     imported_count += 1

@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 from models.request_type import RequestType
 from models.request_type_parameter import RequestTypeParameter
 from models.sync_history import SyncHistory
+from models.ftp_profile import FTPProfile
 
 load_dotenv()
 
@@ -129,16 +130,25 @@ def export_request_types_to_request_network():
             }
         
         elif storage_type == "ftp":
-            host = config.get("ftp_host")
-            user = config.get("ftp_user")
-            passwd = config.get("ftp_password")
-            port = config.get("ftp_port") or 21
+            ftp_profile_id = config.get("ftp_profile_id")
+            if not ftp_profile_id:
+                return {"status": "error", "reason": "ftp_profile_not_configured"}
+                
+            profile_result = session.execute(
+                select(FTPProfile).where(FTPProfile.id == ftp_profile_id, FTPProfile.is_active == True)
+            )
+            ftp_profile = profile_result.scalar_one_or_none()
+            if not ftp_profile:
+                return {"status": "error", "reason": "ftp_profile_not_found_or_inactive"}
+            
+            host = ftp_profile.host
+            user = ftp_profile.username
+            passwd = ftp_profile.password
+            port = ftp_profile.port or 21
+            use_tls = ftp_profile.use_tls
+            
             # Use dedicated /request_types path for request types export
             remote_path = "/request_types"
-            use_tls = config.get("ftp_use_tls", False)
-            
-            if not host:
-                return {"status": "error", "reason": "ftp_host_missing"}
             
             bio = io.BytesIO(json_bytes)
             

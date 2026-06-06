@@ -2,6 +2,7 @@ import typing
 from typing import List
 import uuid
 import sys
+import datetime
 from pathlib import Path
 
 # Ensure Response Network API is in sys.path
@@ -48,6 +49,11 @@ class User(Base, TimestampMixin):
     profile_type: Mapped[str] = mapped_column(String(50), ForeignKey("profile_type_configs.name"), nullable=False, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    
+    # Security Fields (Phase 2)
+    force_password_change: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default='false')
+    allowed_ips: Mapped[list] = mapped_column(JSONB, nullable=False, server_default='[]')
+    password_changed_at: Mapped[datetime.datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     
     # Relationships
     requests: Mapped[list["Request"]] = relationship("Request", back_populates="user", cascade="all, delete-orphan")

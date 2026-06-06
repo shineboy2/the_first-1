@@ -8,6 +8,7 @@ import tempfile
 from core.config import settings
 from storage.local import LocalStorageHandler
 from storage.ftp import FTPStorageHandler
+from core.encryption import encrypt_data
 
 
 class ExportStorageService:
@@ -26,6 +27,9 @@ class ExportStorageService:
         Returns:
             Path or URL where file was saved
         """
+        # Encrypt the data before saving
+        data = encrypt_data(data)
+
         # Prioritize dynamic config if provided
         if config:
             export_type = config.get("type", "local")

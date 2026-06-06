@@ -14,6 +14,8 @@ from celery import shared_task
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
+from core.encryption import encrypt_data
+
 # Load .env file
 load_dotenv()
 
@@ -34,6 +36,7 @@ from models.request_type import RequestType  # noqa
 from models.request_access import UserRequestAccess  # noqa
 from models.profile_type_request_access import ProfileTypeRequestAccess  # noqa
 from models.profile_type_config import ProfileTypeConfig  # noqa
+from models.ftp_profile import FTPProfile  # noqa
 
 
 @shared_task
@@ -160,6 +163,8 @@ def export_users_to_request_network():
                     "full_name": user.full_name if hasattr(user, 'full_name') else None,
                     "profile_type": user.profile_type or "user",
                     "is_active": user.is_active,
+                    "force_password_change": getattr(user, "force_password_change", False),
+                    "allowed_ips": getattr(user, "allowed_ips", []),
                     **merge_user_permissions(user.id, user.profile_type or "user", profile_configs, user_access_by_user_id, request_types_by_id),
                     "rate_limit_per_minute": profile_configs.get(user.profile_type).rate_limit_per_minute if user.profile_type in profile_configs else 10,
                     "rate_limit_per_hour": 100,
@@ -184,20 +189,36 @@ def export_users_to_request_network():
                  export_path.mkdir(parents=True, exist_ok=True)
             
             latest_file = export_path / filename
-            with open(latest_file, 'w', encoding='utf-8') as f:
-                json.dump(export_data, f, indent=2, ensure_ascii=False)
+            json_str = json.dumps(export_data, indent=2, ensure_ascii=False)
+            encrypted_bytes = encrypt_data(json_str.encode('utf-8'))
+            
+            with open(latest_file, 'wb') as f:
+                f.write(encrypted_bytes)
             
             logger.info(f"Exported users locally to {latest_file}")
             
         elif export_type == "ftp":
-            host = config.get("ftp_host")
-            user = config.get("ftp_user")
-            passwd = config.get("ftp_password")
-            port = int(config.get("ftp_port") or 21)
+            ftp_profile_id = config.get("ftp_profile_id")
+            if not ftp_profile_id:
+                return {"status": "error", "reason": "ftp_profile_not_configured"}
+            
+            # Fetch FTP Profile
+            profile_result = session.execute(
+                select(FTPProfile).where(FTPProfile.id == ftp_profile_id, FTPProfile.is_active == True)
+            )
+            ftp_profile = profile_result.scalar_one_or_none()
+            if not ftp_profile:
+                return {"status": "error", "reason": "ftp_profile_not_found_or_inactive"}
+            
+            host = ftp_profile.host
+            user = ftp_profile.username
+            passwd = ftp_profile.password
+            port = ftp_profile.port or 21
+            use_tls = ftp_profile.use_tls
+            
             # Use dedicated /users path for users export
-            base_ftp_path = config.get("ftp_path", "/uploads")
+            base_ftp_path = config.get("ftp_path", "/")
             remote_path = "/users"  # Fixed path for user exports
-            use_tls = config.get("ftp_use_tls", False)
             
             logger.info(f"Connecting to FTP: {host}:{port} as {user}")
             
@@ -205,9 +226,10 @@ def export_users_to_request_network():
                 return {"status": "error", "reason": "ftp_host_missing"}
             
             try:
-                # Prepare JSON data in memory
-                json_data = json.dumps(export_data, indent=2, ensure_ascii=False).encode('utf-8')
-                bio = io.BytesIO(json_data)
+                # Prepare JSON data in memory and encrypt it
+                json_str = json.dumps(export_data, indent=2, ensure_ascii=False)
+                encrypted_bytes = encrypt_data(json_str.encode('utf-8'))
+                bio = io.BytesIO(encrypted_bytes)
                 
                 # Connect to FTP server
                 if use_tls:

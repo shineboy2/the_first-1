@@ -43,6 +43,11 @@ RUN echo '#!/bin/sh' > /usr/local/bin/generate-config.sh && \
     echo 'echo "Generated config.js with API_URL: $NEXT_PUBLIC_API_URL"' >> /usr/local/bin/generate-config.sh && \
     chmod +x /usr/local/bin/generate-config.sh
 
+# Change ownership of app directory so the node user can write config.js at runtime
+RUN chown -R node:node /app
+
+USER node
+
 # Expose port
 EXPOSE 3002
 

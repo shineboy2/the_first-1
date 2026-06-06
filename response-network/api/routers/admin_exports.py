@@ -11,6 +11,7 @@ from auth.dependencies import get_current_admin_user
 from core.dependencies import get_db as get_db_session
 from models.settings import Settings as SettingsModel
 from models.user import User
+from models.ftp_profile import FTPProfile
 
 router = APIRouter(prefix="/admin/exports", tags=["admin-exports"])
 
@@ -78,12 +79,8 @@ async def update_storage_config(operation_type: str, config: Dict[str, Any], db:
     # Add FTP settings if destination_type is ftp
     if value["storage_type"] == "ftp":
         value.update({
-            "ftp_host": config.get("ftp_host"),
-            "ftp_port": config.get("ftp_port", 21),
-            "ftp_user": config.get("ftp_user"),
-            "ftp_password": config.get("ftp_password"),
+            "ftp_profile_id": config.get("ftp_profile_id"),
             "ftp_path": config.get("ftp_path", "/"),
-            "ftp_use_tls": config.get("ftp_use_tls", False),
         })
     elif value["storage_type"] == "local":
         value.update({
@@ -184,12 +181,8 @@ def format_response(operation_type: str, value: dict, schedule: str = None) -> d
         "enabled": value.get("enabled", False),
         "format": value.get("format", "json"),
         "destination_type": value.get("storage_type", "local"),
-        "ftp_host": value.get("ftp_host"),
-        "ftp_port": value.get("ftp_port"),
-        "ftp_user": value.get("ftp_user"),
-        "ftp_password": value.get("ftp_password"),
+        "ftp_profile_id": value.get("ftp_profile_id"),
         "ftp_path": value.get("ftp_path"),
-        "ftp_use_tls": value.get("ftp_use_tls"),
         "local_path": value.get("local_path"),
         "schedule": schedule,
         "configured": True,
@@ -271,18 +264,36 @@ async def test_ftp_connection(
     elif storage_type == "ftp":
         import ftplib
         try:
-            ftp_host = config.get("ftp_host")
-            ftp_port = config.get("ftp_port") or 21
-            ftp_user = config.get("ftp_user")
-            ftp_password = config.get("ftp_password")
+            ftp_profile_id = config.get("ftp_profile_id")
+            if not ftp_profile_id:
+                return {"success": False, "message": "پروفایل FTP تنظیم نشده است"}
+            
+            # Fetch FTP Profile
+            profile_result = await db.execute(
+                select(FTPProfile).where(FTPProfile.id == ftp_profile_id, FTPProfile.is_active == True)
+            )
+            ftp_profile = profile_result.scalar_one_or_none()
+            
+            if not ftp_profile:
+                return {"success": False, "message": "پروفایل FTP یافت نشد یا غیرفعال است"}
+                
+            ftp_host = ftp_profile.host
+            ftp_port = ftp_profile.port or 21
+            ftp_user = ftp_profile.username
+            ftp_password = ftp_profile.password
+            use_tls = ftp_profile.use_tls
             ftp_path = config.get("ftp_path", "/")
             
-            if not ftp_host or not ftp_user:
-                return {"success": False, "message": "اطلاعات FTP ناقص است"}
-            
-            ftp = ftplib.FTP()
-            ftp.connect(ftp_host, ftp_port, timeout=10)
-            ftp.login(ftp_user, ftp_password)
+            if use_tls:
+                from ftplib import FTP_TLS
+                ftp = FTP_TLS()
+                ftp.connect(ftp_host, ftp_port, timeout=10)
+                ftp.login(ftp_user, ftp_password)
+                ftp.prot_p()
+            else:
+                ftp = ftplib.FTP()
+                ftp.connect(ftp_host, ftp_port, timeout=10)
+                ftp.login(ftp_user, ftp_password)
             
             # Try to change directory
             try:

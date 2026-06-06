@@ -7,6 +7,7 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from models.settings import Settings
+from core.encryption import decrypt_data
 
 logger = logging.getLogger(__name__)
 
@@ -62,8 +63,10 @@ class ImportStorageService:
                 return None
                 
             try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                with open(file_path, "rb") as f:
+                    raw_data = f.read()
+                decrypted_data = decrypt_data(raw_data)
+                return json.loads(decrypted_data.decode("utf-8"))
             except Exception as e:
                 logger.error(f"Failed to read local import file {file_path}: {e}")
                 return None
@@ -132,11 +135,14 @@ class ImportStorageService:
                     ftp.close()
                 
                 bio.seek(0)
+                raw_data = bio.getvalue()
+                decrypted_data = decrypt_data(raw_data)
+                
                 if resource_type == "results":
-                     lines = bio.getvalue().decode('utf-8').splitlines()
+                     lines = decrypted_data.decode('utf-8').splitlines()
                      return [json.loads(line) for line in lines if line.strip()]
                 else:
-                     return json.load(bio)
+                     return json.loads(decrypted_data.decode('utf-8'))
             except Exception as e:
                 logger.error(f"FTP Download failed from {host}:{remote_path}: {e}")
                 return None

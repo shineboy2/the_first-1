@@ -13,6 +13,10 @@ services:
       - POSTGRES_USER=${DB_USER:-request_user}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
       - POSTGRES_DB=${DB_NAME:-request_db}
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -29,6 +33,10 @@ services:
     image: redis:7-alpine
     container_name: request-redis
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - redis_data:/data
     networks:
@@ -70,6 +78,10 @@ services:
       - FTP_USE_TLS=${FTP_USE_TLS:-false}
       - SHARED_DATA_DIR=/app/shared_data
       - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS}
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "${API_PORT:-8001}:8000"
     volumes:
@@ -109,6 +121,10 @@ services:
       - FTP_PASSWORD=${FTP_PASSWORD}
       - FTP_USE_TLS=${FTP_USE_TLS:-false}
       - SHARED_DATA_DIR=/app/shared_data
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     command: celery -A workers.celery_app worker -l info --concurrency=4
     volumes:
       - shared_data:/app/shared_data
@@ -147,6 +163,10 @@ services:
       - FTP_PASSWORD=${FTP_PASSWORD}
       - FTP_USE_TLS=${FTP_USE_TLS:-false}
       - SHARED_DATA_DIR=/app/shared_data
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     command: celery -A workers.celery_app beat -l info
     volumes:
       - shared_data:/app/shared_data
@@ -180,6 +200,10 @@ services:
       - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/1
       - FLOWER_PORT=5555
       - FLOWER_BASIC_AUTH=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin123}
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     command: celery -A workers.celery_app flower --port=5555 --basic_auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin123}
     ports:
       - "${FLOWER_PORT:-5555}:5555"
@@ -200,6 +224,10 @@ services:
       context: ./admin-panel
       dockerfile: Dockerfile
     container_name: request-admin-panel
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "${ADMIN_PORT:-3002}:3002"
     environment:

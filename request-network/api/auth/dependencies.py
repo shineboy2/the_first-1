@@ -33,6 +33,14 @@ async def get_current_user(
     if token_data is None or token_data.user_id is None:
         raise credentials_exception
 
+    # Check if token is blocklisted
+    if security.is_token_blocklisted(token):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked or session expired.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     # Fetch user from DB
     query = select(User).where(User.id == token_data.user_id)
     result = await db.execute(query)
@@ -41,6 +49,11 @@ async def get_current_user(
     if user is None:
         raise credentials_exception
 
+    # You could inject Request here to get IP, but get_current_user might be called 
+    # from places without direct access to the Request object in its current signature.
+    # We will rely on the auth_router for the IP check during login and the API Gateway/WAF for ongoing requests, 
+    # OR we can add Request to the dependency injection.
+    
     return user
 
 

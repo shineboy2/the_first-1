@@ -23,12 +23,8 @@ class ExportConfigUpdate(BaseModel):
     # Destination configuration
     destination_type: Optional[str] = Field(None, description="Destination type: local or ftp")
     local_path: Optional[str] = Field(None, description="Local file system path")
-    ftp_host: Optional[str] = Field(None, description="FTP server hostname")
-    ftp_port: Optional[int] = Field(None, description="FTP server port")
-    ftp_username: Optional[str] = Field(None, description="FTP username")
-    ftp_password: Optional[str] = Field(None, description="FTP password")
+    ftp_profile_id: Optional[str] = Field(None, description="FTP Profile ID")
     ftp_path: Optional[str] = Field(None, description="FTP remote path")
-    ftp_use_tls: Optional[bool] = Field(None, description="Use TLS/SSL for FTP")
 
 
 class ExportConfigResponse(BaseModel):
@@ -50,12 +46,8 @@ class ExportConfigResponse(BaseModel):
     # Destination configuration
     destination_type: str = Field(description="Destination type: local or ftp")
     local_path: Optional[str] = Field(None, description="Local file system path")
-    ftp_host: Optional[str] = Field(None, description="FTP server hostname")
-    ftp_port: Optional[int] = Field(None, description="FTP server port")
-    ftp_username: Optional[str] = Field(None, description="FTP username (masked)")
-    ftp_password: Optional[str] = Field(None, description="FTP password (masked)")
+    ftp_profile_id: Optional[str] = Field(None, description="FTP Profile ID")
     ftp_path: Optional[str] = Field(None, description="FTP remote path")
-    ftp_use_tls: Optional[bool] = Field(None, description="Use TLS/SSL for FTP")
 
 
 class ExportStatusResponse(BaseModel):
