@@ -221,7 +221,7 @@ services:
     security_opt:
       - no-new-privileges:true
     ports:
-      - "${ADMIN_PORT:-3002}:3002"
+      - "${ADMIN_PORT:-3001}:3002"
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://192.168.214.135:8001}
     networks:

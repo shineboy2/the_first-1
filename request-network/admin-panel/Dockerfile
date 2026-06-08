@@ -49,9 +49,9 @@ RUN chown -R node:node /app
 USER node
 
 # Expose port
-EXPOSE 3002
+EXPOSE 3001
 
-ENV PORT=3002
+ENV PORT=3001
 
 # Generate runtime config and start server
 CMD ["/bin/sh", "-c", "generate-config.sh && npm start"]
