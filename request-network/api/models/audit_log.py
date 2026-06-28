@@ -20,3 +20,7 @@ class AuditLog(BaseModel):
     request_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     response_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
     meta: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    
+    # Sync fields for Exporting to Response Network
+    sync_status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", index=True)
+    export_batch_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)

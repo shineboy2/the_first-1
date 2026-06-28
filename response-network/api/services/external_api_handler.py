@@ -26,7 +26,7 @@ class ExternalAPIHandler:
             raise ValueError(f"External API '{api_name}' is inactive")
 
         # 1. Resolve Auth (Token or Static Header)
-        auth_headers = self._resolve_auth(api_config)
+        auth_headers, auth_params = self._resolve_auth(api_config)
         
         # 2. Render Payload
         rendered_payload = self._render_payload(api_config.payload_template, payload_vars)
@@ -40,22 +40,28 @@ class ExternalAPIHandler:
             method=api_config.http_method,
             url=api_config.endpoint_url,
             headers=final_headers,
+            auth_params=auth_params,
             json_payload=rendered_payload
         )
 
-    def _resolve_auth(self, api_config: ExternalAPI) -> Dict[str, str]:
-        """Resolves authentication based on auth_type"""
+    def _resolve_auth(self, api_config: ExternalAPI) -> tuple[Dict[str, str], Dict[str, str]]:
+        """Resolves authentication based on auth_type. Returns (headers, params)"""
         auth_type = api_config.auth_type
         
         if auth_type == "none":
-            return {}
+            return {}, {}
         elif auth_type == "static_key":
-            # Assume auth_config looks like {"headers": {"Authorization": "Bearer XYZ"}}
-            if api_config.auth_config and "headers" in api_config.auth_config:
-                return api_config.auth_config["headers"]
-            return {}
+            headers = {}
+            params = {}
+            if api_config.auth_config:
+                if "headers" in api_config.auth_config:
+                    headers = api_config.auth_config["headers"]
+                if "params" in api_config.auth_config:
+                    params = api_config.auth_config["params"]
+            return headers, params
         elif auth_type == "dynamic_token":
-            return self._fetch_dynamic_token(api_config)
+            headers = self._fetch_dynamic_token(api_config)
+            return headers, {}
         else:
             raise ValueError(f"Unsupported auth_type '{auth_type}'")
 
@@ -139,7 +145,7 @@ class ExternalAPIHandler:
         else:
             return node
 
-    def _make_request(self, method: str, url: str, headers: Dict[str, str], json_payload: Any) -> Dict[str, Any]:
+    def _make_request(self, method: str, url: str, headers: Dict[str, str], auth_params: Dict[str, str], json_payload: Any) -> Dict[str, Any]:
         """
         Executes the HTTP call
         """
@@ -147,12 +153,27 @@ class ExternalAPIHandler:
             # We use httpx.Client to manage connections properly or httpx.request
             # Setting a reasonable timeout for external API calls
             with httpx.Client(timeout=30.0) as client:
-                response = client.request(
-                    method=method.upper(),
-                    url=url,
-                    headers=headers,
-                    json=json_payload
-                )
+                kwargs = {
+                    "method": method.upper(),
+                    "url": url,
+                    "headers": headers,
+                }
+                
+                # Setup params, start with auth_params
+                final_params = dict(auth_params) if auth_params else {}
+                
+                if method.upper() == "GET":
+                    # For GET requests, merge payload into query parameters
+                    if isinstance(json_payload, dict):
+                        final_params.update(json_payload)
+                    kwargs["params"] = final_params
+                else:
+                    # For other methods, use auth_params in query string and payload as JSON body
+                    if final_params:
+                        kwargs["params"] = final_params
+                    kwargs["json"] = json_payload
+
+                response = client.request(**kwargs)
                 
                 # Check for HTTP errors
                 response.raise_for_status()

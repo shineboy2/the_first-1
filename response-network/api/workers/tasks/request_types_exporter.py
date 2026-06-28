@@ -69,8 +69,8 @@ def export_request_types_to_request_network():
                 "is_public": rt.is_public,
                 "version": rt.version,
                 "max_items_per_request": rt.max_items_per_request,
-                "available_indices": rt.available_indices or [],
-                "elasticsearch_query_template": rt.elasticsearch_query_template or {},
+                # SECURITY: Sensitive details like elasticsearch_query_template and available_indices 
+                # are intentionally omitted from this export payload.
                 "parameters": [
                     {
                         "id": str(p.id),
@@ -101,8 +101,11 @@ def export_request_types_to_request_network():
             session.commit()
             return {"status": "skipped", "reason": "disabled"}
         
+        from core.encryption import encrypt_data
+        
         filename = "latest.json"
         json_bytes = json.dumps(export_data, indent=2, ensure_ascii=False).encode("utf-8")
+        encrypted_bytes = encrypt_data(json_bytes)
         
         storage_type = config.get("storage_type", "local")
         
@@ -113,7 +116,7 @@ def export_request_types_to_request_network():
             
             file_path = local_path / filename
             with open(file_path, "wb") as f:
-                f.write(json_bytes)
+                f.write(encrypted_bytes)
             
             logger.info(f"Exported {len(export_data)} request types to {file_path}")
             
@@ -150,7 +153,7 @@ def export_request_types_to_request_network():
             # Use dedicated /request_types path for request types export
             remote_path = "/request_types"
             
-            bio = io.BytesIO(json_bytes)
+            bio = io.BytesIO(encrypted_bytes)
             
             if use_tls:
                 ftp = ftplib.FTP_TLS()

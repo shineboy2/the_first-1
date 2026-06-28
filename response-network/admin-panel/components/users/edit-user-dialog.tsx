@@ -84,7 +84,10 @@ export function EditUserDialog({
             try {
                 setLoadingProfileTypes(true);
                 const types = await profileTypeService.getProfileTypes();
-                setProfileTypes(types);
+                // Filter out admin profile type for non-admin users
+                setProfileTypes(types.filter(pt => 
+                    pt.name !== "admin" || (user && (user.profile_type === "admin" || user.role === "admin"))
+                ));
             } catch (error) {
                 console.error("Error fetching profile types:", error);
             } finally {
@@ -232,7 +235,7 @@ export function EditUserDialog({
                                                 })
                                             ) : (
                                                 <>
-                                                    <SelectItem value="admin">مدیر (Admin)</SelectItem>
+                                                    {user?.role === "admin" && <SelectItem value="admin">مدیر (Admin)</SelectItem>}
                                                     <SelectItem value="user">کاربر (User)</SelectItem>
                                                     <SelectItem value="viewer">بیننده (Viewer)</SelectItem>
                                                 </>

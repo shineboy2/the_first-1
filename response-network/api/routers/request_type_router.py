@@ -1,3 +1,4 @@
+import uuid
 from typing import List, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -24,87 +25,151 @@ from schemas.profile_type_request_access import (
     ProfileTypeRequestAccessCreate,
     ProfileTypeRequestAccessRead
 )
-from auth.dependencies import get_current_admin_user
+from auth.dependencies import get_current_admin_user, get_current_active_user
 from core.dependencies import get_db
 router = APIRouter(prefix="/request-types", tags=["request-types"])
 
 
 @router.post("/", response_model=RequestTypeRead, status_code=status.HTTP_201_CREATED)
-async def create_request_type_initial(
-    data: RequestTypeCreateInitial,
-    current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+async def create_request_type(
+    req_type: RequestTypeCreateInitial,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     Step 1: Create a new request type with basic information.
-    Only admin users can create request types.
+    Only admin or user with specific permissions can create request types.
     """
-    # Check if request type with same name exists
-    existing = await db.execute(
-        select(RequestType).where(RequestType.name == data.name)
-    )
-    if existing.scalar_one_or_none():
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can create request types"
+        )
+        
+    # Check if name already exists
+    stmt = select(RequestType).where(RequestType.name == req_type.name)
+    result = await db.execute(stmt)
+    if result.scalars().first():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Request type with name '{data.name}' already exists"
+            detail="Request type with this name already exists"
         )
-    
-    # Create request type with minimal info
-    db_obj = RequestType(
-        name=data.name,
-        description=data.description,
-        is_active=data.is_active,
-        created_by_id=current_user.id
+        
+    if req_type.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot create a request type as active initially. You must configure parameters and execution method first."
+        )
+
+    # Create request type
+    new_type = RequestType(
+        id=uuid.uuid4(),
+        name=req_type.name,
+        description=req_type.description,
+        is_active=False,
+        created_by_id=current_user.id,
+        # Default values for step 1
+        is_public=False,
+        version="1.0.0",
+        max_items_per_request=100,
+        available_indices=["default"],
+        elasticsearch_query_template={},
+        execution_method=req_type.execution_method,
+        external_api_id=req_type.external_api_id,
+        file_request_config_id=req_type.file_request_config_id
     )
-    db.add(db_obj)
+    
+    db.add(new_type)
     await db.commit()
-    await db.refresh(db_obj, ["parameters"])
+    
+    query = select(RequestType).options(selectinload(RequestType.parameters)).where(RequestType.id == new_type.id)
+    result = await db.execute(query)
+    db_obj = result.scalar_one()
     
     return db_obj
 
 
-@router.put("/{request_type_id}/configure", response_model=RequestTypeRead)
+@router.put("/{type_id}/params", response_model=RequestTypeRead)
 async def configure_request_type_params(
-    request_type_id: UUID,
-    data: RequestTypeConfigureParams,
-    current_user: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db)
+    type_id: UUID,
+    config: RequestTypeConfigureParams,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
     """
-    Step 2: Configure parameters and settings for the request type.
-    Only admin users can configure request types.
+    Step 2: Configure limits, visibility, and parameters for the request type.
     """
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can configure request types"
+        )
+        
     # Get request type
-    db_obj = await db.get(RequestType, request_type_id)
-    if not db_obj:
+    stmt = select(RequestType).where(RequestType.id == type_id)
+    result = await db.execute(stmt)
+    req_type = result.scalars().first()
+    
+    if not req_type:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Request type with ID {request_type_id} not found"
+            detail="Request type not found"
         )
+        
+    # Update request type fields
+    req_type.is_active = config.is_active
+    req_type.is_public = config.is_public
+    req_type.max_items_per_request = config.max_items_per_request
+    req_type.available_indices = config.available_indices
+    if config.execution_method is not None:
+        req_type.execution_method = config.execution_method
+        req_type.external_api_id = config.external_api_id
+        req_type.file_request_config_id = config.file_request_config_id
     
-    # Update basic settings
-    for field, value in data.model_dump(exclude={"parameters"}).items():
-        setattr(db_obj, field, value)
-    
+    # Validate that active request types must have at least one parameter
+    if config.is_active:
+        if not config.parameters or len(config.parameters) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot activate a request type without at least one parameter."
+            )
+            
+        # Also validate that the execution method is fully configured
+        if req_type.execution_method == "elasticsearch" and not req_type.elasticsearch_query_template:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot activate an Elasticsearch request type without a query template."
+            )
+        if req_type.execution_method == "external_api" and not req_type.external_api_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot activate an External API request type without an API configuration."
+            )
+        if req_type.execution_method == "file_request" and not req_type.file_request_config_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot activate a File request type without a file configuration."
+            )
+
     # Update parameters
     # First remove existing parameters
     await db.execute(
         delete(RequestTypeParameter)
-        .where(RequestTypeParameter.request_type_id == request_type_id)
+        .where(RequestTypeParameter.request_type_id == type_id)
     )
     
     # Add new parameters
-    for param in data.parameters:
+    for param in config.parameters:
         db_param = RequestTypeParameter(
             **param.model_dump(),
-            request_type_id=request_type_id
+            request_type_id=type_id
         )
         db.add(db_param)
         
     await db.commit()
     
     # Re-fetch with parameters loaded
-    query = select(RequestType).options(selectinload(RequestType.parameters)).where(RequestType.id == request_type_id)
+    query = select(RequestType).options(selectinload(RequestType.parameters)).where(RequestType.id == type_id)
     result = await db.execute(query)
     db_obj = result.scalar_one()
     
@@ -132,6 +197,13 @@ async def configure_request_type_query(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Request type with ID {request_type_id} not found"
+        )
+    
+    # Check if request type is active and they are trying to remove the query
+    if db_obj.is_active and db_obj.execution_method == "elasticsearch" and not data.elasticsearch_query_template:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot remove query template from an active Elasticsearch request type."
         )
     
     # Update query template

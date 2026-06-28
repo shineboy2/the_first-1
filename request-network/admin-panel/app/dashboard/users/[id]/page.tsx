@@ -17,7 +17,19 @@ import {
     List,
     Lock,
     Globe,
+    FileText,
+    BarChart3
 } from "lucide-react";
+import {
+    BarChart,
+    Bar,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    ResponsiveContainer,
+    Legend
+} from "recharts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -40,8 +52,8 @@ import {
 } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
 
-import { userService, apiKeyService, rateLimitService } from "@/lib/services/admin-api";
-import type { User, APIKey, RateLimitStats } from "@/lib/services/admin-api";
+import { userService, apiKeyService, rateLimitService, requestService, auditLogService } from "@/lib/services/admin-api";
+import type { User, APIKey, RateLimitStats, Request as ApiRequest } from "@/lib/services/admin-api";
 
 export default function UserDetailsPage({ params }: { params: { id: string } }) {
     const router = useRouter();
@@ -50,6 +62,8 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
     const [user, setUser] = useState<User | null>(null);
     const [apiKeys, setApiKeys] = useState<APIKey[]>([]);
     const [rateLimit, setRateLimit] = useState<RateLimitStats | null>(null);
+    const [requests, setRequests] = useState<ApiRequest[]>([]);
+    const [auditLogs, setAuditLogs] = useState<any[]>([]);
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -59,6 +73,11 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
     const [generatedKey, setGeneratedKey] = useState<string | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
 
+    // Edit IPs State
+    const [isEditingIps, setIsEditingIps] = useState(false);
+    const [editIpsInput, setEditIpsInput] = useState("");
+    const [isSavingIps, setIsSavingIps] = useState(false);
+
     // Rate Limit Form State (kept for reset only)
 
     const fetchUserData = async () => {
@@ -67,13 +86,17 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
             setError(null);
             setGeneratedKey(null);
 
-            const [userData, keysData] = await Promise.all([
+            const [userData, keysData, userRequests, logsData] = await Promise.all([
                 userService.getUserById(params.id),
-                apiKeyService.getUserApiKeys(params.id)
+                apiKeyService.getUserApiKeys(params.id),
+                requestService.getAllRequests(0, 100, params.id).catch(() => []),
+                auditLogService.getLogs({ user_id: params.id, limit: 50 }).catch(() => ({ items: [] }))
             ]);
 
             setUser(userData);
             setApiKeys(Array.isArray(keysData) ? keysData : []);
+            setRequests(Array.isArray(userRequests) ? userRequests : []);
+            setAuditLogs(logsData?.items || []);
             setRateLimit(userData.rate_limit_stats ?? null);
 
             // Rate limit data loaded
@@ -231,6 +254,68 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
                                 <Label className="text-gray-500">تاریخ تایید عضویت</Label>
                                 <div className="mt-1" dir="ltr">{new Date(user.created_at).toLocaleString("fa-IR")}</div>
                             </div>
+                            <div className="pt-4 border-t">
+                                <div className="flex justify-between items-start">
+                                    <Label className="text-gray-500 flex items-center gap-2">
+                                        <Shield className="h-4 w-4" />
+                                        آی‌پی‌های مجاز (Allowed IPs)
+                                    </Label>
+                                    {!isEditingIps ? (
+                                        <Button variant="ghost" size="sm" onClick={() => {
+                                            setEditIpsInput(user.allowed_ips ? user.allowed_ips.join(", ") : "");
+                                            setIsEditingIps(true);
+                                        }}>
+                                            ویرایش
+                                        </Button>
+                                    ) : (
+                                        <div className="flex gap-2">
+                                            <Button variant="ghost" size="sm" onClick={() => setIsEditingIps(false)} disabled={isSavingIps}>
+                                                انصراف
+                                            </Button>
+                                            <Button size="sm" onClick={async () => {
+                                                try {
+                                                    setIsSavingIps(true);
+                                                    const ips = editIpsInput.split(",").map(i => i.trim()).filter(Boolean);
+                                                    const updatedUser = await userService.updateUserAllowedIps(params.id, ips);
+                                                    setUser(updatedUser);
+                                                    setIsEditingIps(false);
+                                                } catch (err: any) {
+                                                    setError(err?.response?.data?.detail || "خطا در بروزرسانی آی‌پی‌ها");
+                                                } finally {
+                                                    setIsSavingIps(false);
+                                                }
+                                            }} disabled={isSavingIps}>
+                                                {isSavingIps ? <Loader2 className="h-3 w-3 animate-spin" /> : "ذخیره"}
+                                            </Button>
+                                        </div>
+                                    )}
+                                </div>
+                                
+                                {isEditingIps ? (
+                                    <div className="mt-2 space-y-2">
+                                        <Input
+                                            value={editIpsInput}
+                                            onChange={(e) => setEditIpsInput(e.target.value)}
+                                            placeholder="192.168.1.1, 10.0.0.1"
+                                            className="font-mono text-left"
+                                            dir="ltr"
+                                        />
+                                        <p className="text-xs text-amber-600 dark:text-amber-400">توجه: این تغییرات ممکن است با همگام‌سازی از شبکه پاسخ بازنویسی شوند.</p>
+                                    </div>
+                                ) : (
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                        {user.allowed_ips && user.allowed_ips.length > 0 ? (
+                                            user.allowed_ips.map((ip: string, index: number) => (
+                                                <Badge key={index} variant="outline" className="font-mono bg-gray-100 dark:bg-gray-800">
+                                                    {ip}
+                                                </Badge>
+                                            ))
+                                        ) : (
+                                            <span className="text-sm text-gray-400">همه آی‌پی‌ها مجاز هستند</span>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         </CardContent>
                     </Card>
 
@@ -374,6 +459,108 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
                     </CardContent>
                 </Card>
 
+                {/* User Requests & Success Rate */}
+                <Card className="border-t-4 border-t-blue-500">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <BarChart3 className="h-5 w-5" />
+                            درخواست‌های کاربر و نرخ موفقیت
+                        </CardTitle>
+                        <CardDescription>
+                            نمایش 100 درخواست اخیر کاربر و نمودار وضعیت آن‌ها بر اساس نوع درخواست
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                        {(() => {
+                            if (requests.length === 0) {
+                                return <p className="text-sm text-gray-500 text-center py-4">درخواستی برای این کاربر یافت نشد.</p>;
+                            }
+
+                            // Calculate stats for chart
+                            const statsMap: Record<string, { name: string, success: number, failed: number, pending: number }> = {};
+                            requests.forEach(req => {
+                                const type = req.request_type || req.query_type || "نامشخص";
+                                if (!statsMap[type]) {
+                                    statsMap[type] = { name: type, success: 0, failed: 0, pending: 0 };
+                                }
+                                const status = req.status.toLowerCase();
+                                if (status.includes("success") || (status === "completed" && !req.error)) {
+                                    statsMap[type].success++;
+                                } else if (status.includes("fail") || status.includes("error")) {
+                                    statsMap[type].failed++;
+                                } else {
+                                    statsMap[type].pending++;
+                                }
+                            });
+                            const chartData = Object.values(statsMap);
+
+                            return (
+                                <div className="space-y-8">
+                                    <div className="h-[300px] w-full" dir="ltr">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="name" />
+                                                <YAxis />
+                                                <Tooltip />
+                                                <Legend />
+                                                <Bar dataKey="success" name="موفق" stackId="a" fill="#22c55e" />
+                                                <Bar dataKey="failed" name="خطا" stackId="a" fill="#ef4444" />
+                                                <Bar dataKey="pending" name="در انتظار" stackId="a" fill="#eab308" />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+
+                                    <div className="rounded-md border max-h-[400px] overflow-auto">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>نوع درخواست</TableHead>
+                                                    <TableHead>وضعیت</TableHead>
+                                                    <TableHead>تاریخ</TableHead>
+                                                    <TableHead>آی‌دی درخواست</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {requests.slice(0, 10).map((req) => {
+                                                    const statusLower = req.status.toLowerCase();
+                                                    let badgeVariant: "default" | "destructive" | "secondary" = "secondary";
+                                                    let statusText = req.status;
+
+                                                    if (statusLower.includes("success") || (statusLower === "completed" && !req.error)) {
+                                                        badgeVariant = "default";
+                                                        statusText = "موفق ✓";
+                                                    } else if (statusLower.includes("fail") || statusLower.includes("error")) {
+                                                        badgeVariant = "destructive";
+                                                        statusText = "خطا";
+                                                    }
+
+                                                    return (
+                                                        <TableRow key={req.id}>
+                                                            <TableCell className="font-medium">{req.request_type || req.query_type}</TableCell>
+                                                            <TableCell>
+                                                                <Badge variant={badgeVariant} className={badgeVariant === "default" ? "bg-green-100 text-green-800 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-300" : ""}>
+                                                                    {statusText}
+                                                                </Badge>
+                                                            </TableCell>
+                                                            <TableCell dir="ltr" className="text-sm">
+                                                                {new Date(req.created_at).toLocaleString("fa-IR")}
+                                                            </TableCell>
+                                                            <TableCell className="font-mono text-xs text-gray-500">
+                                                                {req.id.substring(0, 8)}...
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    );
+                                                })}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+                    </CardContent>
+                </Card>
+
                 {/* API Keys Table */}
                 <Card className="border-t-4 border-t-purple-500">
                     <CardHeader>
@@ -444,6 +631,54 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
                                         <TableRow>
                                             <TableCell colSpan={4} className="text-center py-6 text-gray-500">
                                                 هیچ کلید فعالی برای این کاربر یافت نشد.
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </CardContent>
+                </Card>
+                {/* Audit Logs Section */}
+                <Card className="md:col-span-2">
+                    <CardHeader>
+                        <CardTitle className="text-xl flex items-center gap-2">
+                            <Activity className="h-5 w-5 text-purple-500" />
+                            تاریخچه ورود (در حال همگام‌سازی)
+                        </CardTitle>
+                        <CardDescription>
+                            این لیست شامل لاگین‌های اخیر است که هنوز به شبکه پاسخ منتقل نشده‌اند.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="rounded-md border">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>عملیات</TableHead>
+                                        <TableHead>آی‌پی</TableHead>
+                                        <TableHead>وضعیت همگام‌سازی</TableHead>
+                                        <TableHead>تاریخ</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {auditLogs.length > 0 ? (
+                                        auditLogs.map((log) => (
+                                            <TableRow key={log.id}>
+                                                <TableCell className="font-medium">{log.action}</TableCell>
+                                                <TableCell dir="ltr">{log.ip_address}</TableCell>
+                                                <TableCell>
+                                                    <Badge variant={log.sync_status === 'pending' ? 'secondary' : 'default'}>
+                                                        {log.sync_status}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell dir="ltr">{new Date(log.created_at).toLocaleString("fa-IR")}</TableCell>
+                                            </TableRow>
+                                        ))
+                                    ) : (
+                                        <TableRow>
+                                            <TableCell colSpan={4} className="text-center py-6 text-gray-500">
+                                                لاگ ممیزی در این شبکه یافت نشد (احتمالاً به شبکه پاسخ همگام‌سازی شده‌اند).
                                             </TableCell>
                                         </TableRow>
                                     )}

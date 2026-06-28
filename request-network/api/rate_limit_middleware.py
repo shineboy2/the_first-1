@@ -11,6 +11,10 @@ import logging
 
 from rate_limiter import RateLimiter, LimitLevel
 from db.redis_client import get_redis_client
+from db.session import AsyncSessionFactory
+from models import User, SubUser
+from sqlalchemy import select
+
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +41,7 @@ class RateLimitGracePeriodMiddleware(BaseHTTPMiddleware):
         # فقط برای authenticated requests
         user_id = request.headers.get("X-User-ID") or request.headers.get("user_id")
         profile = request.headers.get("X-User-Profile", "free")
+        sub_user_id = request.headers.get("X-End-User-Id") or request.headers.get("X-User-Id") # Fallback to X-User-Id if they send it like that
         
         if not user_id:
             # ادامه بدون بررسی rate limit
@@ -44,10 +49,58 @@ class RateLimitGracePeriodMiddleware(BaseHTTPMiddleware):
             return response
         
         try:
-            # بررسی Rate Limit
             redis_client = await get_redis_client()
             rate_limiter = RateLimiter(redis_client.client)
-            
+
+            # SubUser Logic
+            if sub_user_id:
+                async with AsyncSessionFactory() as db:
+                    # Fetch Enterprise User to get sub-user rate limits
+                    stmt = select(User).where(User.id == user_id)
+                    result = await db.execute(stmt)
+                    enterprise_user = result.scalars().first()
+
+                    if enterprise_user:
+                        subuser_limits = {
+                            "minute": enterprise_user.subuser_rate_limit_per_minute,
+                            "hour": enterprise_user.subuser_rate_limit_per_hour,
+                            "day": enterprise_user.subuser_rate_limit_per_day,
+                        }
+
+                        # JIT Provisioning
+                        stmt_sub = select(SubUser).where(
+                            SubUser.enterprise_user_id == enterprise_user.id,
+                            SubUser.external_user_id == sub_user_id
+                        )
+                        sub_result = await db.execute(stmt_sub)
+                        sub_user = sub_result.scalars().first()
+
+                        if not sub_user:
+                            sub_user = SubUser(
+                                enterprise_user_id=enterprise_user.id,
+                                external_user_id=sub_user_id
+                            )
+                            db.add(sub_user)
+                            await db.commit()
+
+                        # Check Sub-user Rate Limit
+                        sub_level, sub_details = await rate_limiter.check_subuser_limit(
+                            str(enterprise_user.id), sub_user_id, subuser_limits
+                        )
+
+                        if sub_level == LimitLevel.EXCEEDED:
+                            logger.warning(f"Subuser {sub_user_id} exceeded rate limit")
+                            return JSONResponse(
+                                status_code=429,
+                                content={
+                                    "detail": f"Subuser Rate limit exceeded for {sub_details['hit_limit']}",
+                                    "retry_after": 60,
+                                    "limit_exceeded": sub_details["hit_limit"],
+                                },
+                                headers={"X-RateLimit-Status": "EXCEEDED"}
+                            )
+
+            # بررسی Rate Limit اصلی اینترپرایز
             limit_level, details = await rate_limiter.check_limit(user_id, profile)
             
             # ✅ OK - ادامه عادی
@@ -62,8 +115,11 @@ class RateLimitGracePeriodMiddleware(BaseHTTPMiddleware):
                 
                 # Increment counter بعد از پاسخ
                 await rate_limiter.increment_counter(user_id)
+                if sub_user_id:
+                    await rate_limiter.increment_subuser_counter(user_id, sub_user_id)
                 
                 return response
+
             
             # ⚠️ WARNING (80%) - اجازه دارد اما هشدار
             elif limit_level == LimitLevel.WARNING:
@@ -81,6 +137,9 @@ class RateLimitGracePeriodMiddleware(BaseHTTPMiddleware):
                 
                 # Increment counter
                 await rate_limiter.increment_counter(user_id)
+                if sub_user_id:
+                    await rate_limiter.increment_subuser_counter(user_id, sub_user_id)
+
                 
                 logger.warning(f"User {user_id} reached {details['hit_limit']} warning threshold")
                 
@@ -100,6 +159,9 @@ class RateLimitGracePeriodMiddleware(BaseHTTPMiddleware):
                 
                 # Increment counter
                 await rate_limiter.increment_counter(user_id)
+                if sub_user_id:
+                    await rate_limiter.increment_subuser_counter(user_id, sub_user_id)
+
                 
                 logger.warning(f"User {user_id} in soft block grace period for {details['hit_limit']}")
                 

@@ -84,8 +84,13 @@ def import_results_from_response_network(self):
                     ).first()
 
                     if request:
-                        # Check if already completed to avoid overwrites (optional)
-                        if request.status == "completed":
+                        # Check if already completed to avoid overwrites
+                        if request.status in ["completed", "completed_success", "completed_error"]:
+                            continue
+                            
+                        # Double check response doesn't already exist
+                        existing_resp = db.query(Response).filter(Response.request_id == request.id).first()
+                        if existing_resp:
                             continue
 
                         # Create Response object

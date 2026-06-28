@@ -56,6 +56,7 @@ def setup_redbeat_tasks(sender, **kwargs):
         ("export-users-every-5min", "workers.tasks.users_exporter.export_users_to_request_network", 300.0),
         ("import-requests-from-request-network", "workers.tasks.import_requests.import_requests_from_request_network", 10.0),
         ("export-results-to-request-network", "workers.tasks.export_results.export_completed_results", 10.0),
+        ("import-audit-logs", "workers.tasks.import_audit_logs.import_audit_logs", 30.0),
         ("export-request-types-every-minute", "workers.tasks.request_types_exporter.export_request_types_to_request_network", 60.0),
         ("execute-pending-queries", "workers.tasks.execute_query.execute_pending_queries", 10.0),
         ("cleanup-old-files-daily", "cleanup.cleanup_old_files", 86400.0),

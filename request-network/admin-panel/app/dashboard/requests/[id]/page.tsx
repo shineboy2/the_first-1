@@ -40,7 +40,7 @@ export default function RequestDetailsPage({ params }: { params: { id: string } 
         try {
             setLoading(true);
             setError(null);
-            const data = await requestService.getRequestDetails(params.id);
+            const data = await requestService.getRequestById(params.id);
             setRequest(data);
         } catch (err: any) {
             console.error("Error fetching request data:", err);
@@ -57,10 +57,14 @@ export default function RequestDetailsPage({ params }: { params: { id: string } 
     }, [params.id, currentUser]);
 
     const getStatusIcon = (status: string) => {
-        switch (status?.toLowerCase()) {
-            case "completed":
+        const normalized = (request as any)?.effective_status?.toLowerCase?.() || status?.toLowerCase();
+        switch (normalized) {
+            case "completed_success":
             case "success":
                 return <CheckCircle2 className="h-6 w-6 text-green-500" />;
+            case "completed_error":
+            case "completed":
+                return <AlertCircle className="h-6 w-6 text-orange-500" />;
             case "failed":
                 return <XCircle className="h-6 w-6 text-red-500" />;
             case "pending":
@@ -71,9 +75,14 @@ export default function RequestDetailsPage({ params }: { params: { id: string } 
     };
 
     const getStatusBadge = (status: string) => {
-        switch (status?.toLowerCase()) {
+        const normalized = (request as any)?.effective_status?.toLowerCase?.() || status?.toLowerCase();
+        switch (normalized) {
+            case "completed_success":
+            case "success":
+                return <Badge className="bg-green-100 text-green-800 hover:bg-green-200">وضعیت: موفق ✓</Badge>;
+            case "completed_error":
             case "completed":
-                return <Badge className="bg-green-100 text-green-800 hover:bg-green-200">وضعیت: موفق</Badge>;
+                return <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-200">تکمیل شده (خطا)</Badge>;
             case "failed":
                 return <Badge variant="destructive">وضعیت: خطا</Badge>;
             default:
@@ -248,7 +257,7 @@ export default function RequestDetailsPage({ params }: { params: { id: string } 
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            {!request.response ? (
+                            {!request.response && (request as any)?.effective_status !== 'completed_error' && request.status !== 'failed' ? (
                                 <div className="text-center py-12 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-dashed border-gray-300 dark:border-gray-700">
                                     <Box className="h-10 w-10 text-gray-400 mx-auto mb-3 opacity-50" />
                                     <p className="text-gray-500 font-medium">پاسخی برای این درخواست ثبت نشده است.</p>
@@ -256,6 +265,15 @@ export default function RequestDetailsPage({ params }: { params: { id: string } 
                                 </div>
                             ) : (
                                 <div className="space-y-6">
+                                    {((request as any)?.error_message || (request.response && request.response.error_message)) && (
+                                        <Alert variant="destructive" className="mb-4">
+                                            <AlertCircle className="h-4 w-4" />
+                                            <AlertTitle>خطا در پردازش</AlertTitle>
+                                            <AlertDescription>
+                                                {(request as any).error_message || request.response?.error_message}
+                                            </AlertDescription>
+                                        </Alert>
+                                    )}
                                     <div className="flex flex-wrap gap-4 mb-4">
                                         {request.response.execution_time_ms && (
                                             <Badge variant="outline" className="bg-blue-50 text-blue-800 border-blue-200">
@@ -268,12 +286,24 @@ export default function RequestDetailsPage({ params }: { params: { id: string } 
                                     </div>
 
                                     {/* Handle Media Rendering */}
-                                    {renderMediaFromResponse(request.response.result_data)}
+                                    {renderMediaFromResponse(
+                                        typeof request.response.result_data === 'string' 
+                                            ? (() => { try { return JSON.parse(request.response.result_data); } catch(e) { return null; } })()
+                                            : request.response.result_data
+                                    )}
 
                                     <div className="mt-4">
                                         <Label className="text-xs text-gray-500 mb-2 block">داده‌های خام (JSON)</Label>
                                         <pre className="p-4 bg-[#0d1117] text-[#e6edf3] rounded-lg overflow-x-auto text-xs font-mono leading-relaxed shadow-inner border border-gray-800" dir="ltr">
-                                            {JSON.stringify(request.response.result_data, null, 2)}
+                                            {typeof request.response.result_data === 'string' 
+                                                ? (() => {
+                                                    try {
+                                                        return JSON.stringify(JSON.parse(request.response.result_data), null, 2);
+                                                    } catch (e) {
+                                                        return request.response.result_data;
+                                                    }
+                                                })() 
+                                                : JSON.stringify(request.response.result_data, null, 2)}
                                         </pre>
                                     </div>
                                 </div>

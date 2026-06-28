@@ -54,10 +54,14 @@ def cleanup_old_files():
             stats["total_size_freed"] += size_freed
             logger.info(f"Cleaned {stats['imports_deleted']} old import archive files (>{import_retention_days} days)")
         
+        # پاکسازی Audit Logs قدیمی که سینک شده‌اند (7 روز)
+        stats["synced_logs_deleted"] = _cleanup_synced_audit_logs(export_retention_days)
+        
         # گزارش نهایی
         size_mb = stats["total_size_freed"] / (1024 * 1024)
         logger.info(
             f"Cleanup completed: {stats['exports_deleted'] + stats['imports_deleted']} files deleted, "
+            f"{stats['synced_logs_deleted']} synced audit logs deleted, "
             f"{size_mb:.2f} MB freed"
         )
         
@@ -99,9 +103,52 @@ def _cleanup_directory(directory: Path, cutoff_date: datetime, pattern: str = "*
                     size_freed += file_size
                     logger.debug(f"Deleted old file: {file_path.name}")
                 except Exception as e:
-                    logger.warning(f"Failed to delete {file_path}: {e}")
-    
+                    logger.error(f"Failed to delete {file_path}: {e}")
+                    
     except Exception as e:
-        logger.error(f"Error cleaning directory {directory}: {e}")
-    
+        logger.error(f"Error accessing directory {directory}: {e}")
+        
     return deleted_count, size_freed
+
+
+def _cleanup_synced_audit_logs(retention_days: int) -> int:
+    """
+    Delete synced audit logs older than retention_days from the database.
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from core.config import settings
+    from models.audit_log import AuditLog
+    
+    deleted_count = 0
+    
+    try:
+        # Setup sync database connection
+        sync_engine = create_engine(
+            str(settings.DATABASE_URL).replace('postgresql+asyncpg', 'postgresql+psycopg'),
+            pool_pre_ping=True
+        )
+        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
+        
+        db = SessionLocal()
+        try:
+            cutoff_date = datetime.now() - timedelta(days=retention_days)
+            
+            # Find logs that are "synced" and older than cutoff_date
+            logs_to_delete = db.query(AuditLog).filter(
+                AuditLog.sync_status == "synced",
+                AuditLog.created_at < cutoff_date
+            ).all()
+            
+            for log in logs_to_delete:
+                db.delete(log)
+                deleted_count += 1
+                
+            db.commit()
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"Error cleaning up synced audit logs: {e}")
+        
+    return deleted_count

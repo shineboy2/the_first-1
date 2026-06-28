@@ -40,6 +40,12 @@ class User(BaseModel):
     daily_request_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
     monthly_request_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=2000)
 
+    # SubUser Rate Limits
+    subuser_rate_limit_per_minute: Mapped[int] = mapped_column(Integer, nullable=False, default=10, server_default='10')
+    subuser_rate_limit_per_hour: Mapped[int] = mapped_column(Integer, nullable=False, default=100, server_default='100')
+    subuser_rate_limit_per_day: Mapped[int] = mapped_column(Integer, nullable=False, default=500, server_default='500')
+
+
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     synced_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -61,10 +67,14 @@ class User(BaseModel):
         Check if user is allowed to submit this request type.
         
         Priority:
-        1. If in blocked_request_types → False
-        2. If allowed_request_types is empty → True (allow all)
-        3. If allowed_request_types is not empty → must be in it
+        1. If admin -> True
+        2. If in blocked_request_types → False
+        3. If allowed_request_types is empty → False (allow NONE, Secure Default)
+        4. If allowed_request_types is not empty → must be in it
         """
+        if self.profile_type == 'admin':
+            return True
+
         if request_type in self.blocked_request_types:
             return False
         

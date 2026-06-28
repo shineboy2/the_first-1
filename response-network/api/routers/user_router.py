@@ -47,7 +47,13 @@ async def create_user(
     """
     Create a new user.
     Only admins can create new users.
+    Cannot create another admin user.
     """
+    if getattr(user_in, "profile_type", None) == "admin" or getattr(user_in, "role", None) == "admin":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot create a new admin user. Only one admin is allowed."
+        )
     return await user_service.create_user(db, user_in)
 
 @router.post("/force-create", response_model=User)
@@ -194,10 +200,18 @@ async def update_user(
     """
     Update user information.
     Only admins can update users.
+    Cannot change a user to admin.
     """
     user = await user_service.get_user(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+        
+    if getattr(user_in, "profile_type", None) == "admin" and getattr(user, "profile_type", None) != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot change a user to admin."
+        )
+        
     return await user_service.update_user(db, user, user_in)
 
 @router.delete("/{user_id}")

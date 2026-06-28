@@ -12,6 +12,13 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import {
     Form,
@@ -31,7 +38,7 @@ import { requestService } from "@/lib/services/admin-api";
 const createRequestTypeSchema = z.object({
     name: z.string().min(1, "نام الزامی است"),
     description: z.string().optional(),
-    is_active: z.boolean().default(true),
+    is_active: z.boolean().default(false),
 });
 
 type CreateRequestTypeFormData = z.infer<typeof createRequestTypeSchema>;
@@ -55,7 +62,7 @@ export function CreateRequestTypeDialog({
         defaultValues: {
             name: "",
             description: "",
-            is_active: true,
+            is_active: false,
         },
     });
 
@@ -116,26 +123,8 @@ export function CreateRequestTypeDialog({
                             )}
                         />
 
-                        <FormField
-                            control={form.control}
-                            name="is_active"
-                            render={({ field }) => (
-                                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                                    <div className="space-y-0.5">
-                                        <FormLabel className="text-base">فعال</FormLabel>
-                                        <FormDescription>
-                                            آیا این نوع درخواست فعال باشد؟
-                                        </FormDescription>
-                                    </div>
-                                    <FormControl>
-                                        <Switch
-                                            checked={field.value}
-                                            onCheckedChange={field.onChange}
-                                        />
-                                    </FormControl>
-                                </FormItem>
-                            )}
-                        />
+
+
 
                         <DialogFooter>
                             <Button

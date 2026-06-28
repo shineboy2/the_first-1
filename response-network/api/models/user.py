@@ -46,6 +46,12 @@ class User(Base, TimestampMixin):
     max_results_per_request: Mapped[int] = mapped_column(Integer, nullable=False, default=1000)
     allowed_indices: Mapped[List[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
     allowed_external_apis: Mapped[List[str]] = mapped_column(JSONB, nullable=False, server_default='[]')
+    
+    # SubUser Rate Limits
+    subuser_rate_limit_per_minute: Mapped[int] = mapped_column(Integer, nullable=False, default=10, server_default='10')
+    subuser_rate_limit_per_hour: Mapped[int] = mapped_column(Integer, nullable=False, default=100, server_default='100')
+    subuser_rate_limit_per_day: Mapped[int] = mapped_column(Integer, nullable=False, default=500, server_default='500')
+
     profile_type: Mapped[str] = mapped_column(String(50), ForeignKey("profile_type_configs.name"), nullable=False, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, index=True)

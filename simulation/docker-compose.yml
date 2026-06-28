@@ -160,6 +160,10 @@ services:
       - FTP_USER=${FTP_USER}
       - FTP_PASSWORD=${FTP_PASSWORD}
       - FTP_USE_TLS=${FTP_USE_TLS}
+    volumes:
+      - ./data/req_shared_data:/app/shared_data
+      - ./data/req_exports:/app/exports
+      - ./data/req_imports:/app/imports
     networks:
       - req_net
     depends_on:
@@ -195,6 +199,10 @@ services:
       - FTP_USER=${FTP_USER}
       - FTP_PASSWORD=${FTP_PASSWORD}
       - FTP_USE_TLS=${FTP_USE_TLS}
+    volumes:
+      - ./data/req_shared_data:/app/shared_data
+      - ./data/req_exports:/app/exports
+      - ./data/req_imports:/app/imports
     networks:
       - req_net
     depends_on:
@@ -217,7 +225,7 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:${REQ_API_PORT:-8001}
     ports:
-      - "${REQ_ADMIN_PORT:-3001}:3002"
+      - "${REQ_ADMIN_PORT:-3001}:3001"
     networks:
       - req_net
     depends_on:
@@ -306,6 +314,10 @@ services:
       - BACKEND_CORS_ORIGINS=["http://localhost:3000"]
     ports:
       - "${RESP_API_PORT:-8000}:8000"
+    volumes:
+      - ./data/resp_shared_data:/app/shared_data
+      - ./data/resp_exports:/app/exports
+      - ./data/resp_imports:/app/imports
     networks:
       - resp_net
     depends_on:
@@ -343,6 +355,10 @@ services:
       - FTP_USER=${FTP_USER}
       - FTP_PASSWORD=${FTP_PASSWORD}
       - FTP_USE_TLS=${FTP_USE_TLS}
+    volumes:
+      - ./data/resp_shared_data:/app/shared_data
+      - ./data/resp_exports:/app/exports
+      - ./data/resp_imports:/app/imports
     networks:
       - resp_net
     depends_on:
@@ -378,6 +394,10 @@ services:
       - FTP_USER=${FTP_USER}
       - FTP_PASSWORD=${FTP_PASSWORD}
       - FTP_USE_TLS=${FTP_USE_TLS}
+    volumes:
+      - ./data/resp_shared_data:/app/shared_data
+      - ./data/resp_exports:/app/exports
+      - ./data/resp_imports:/app/imports
     networks:
       - resp_net
     depends_on:

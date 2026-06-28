@@ -12,6 +12,7 @@ from models.user import User
 from models.api_key import ApiKey
 from schemas.user import User as UserSchema
 from schemas.api_key import APIKeyCreate, APIKeyRead, APIKeyGenerated
+from pydantic import BaseModel
 from rate_limiter import RateLimiter
 import secrets
 
@@ -118,6 +119,32 @@ async def deactivate_user(
     await db.commit()
     await db.refresh(user)
     return user
+
+
+class UserIPUpdate(BaseModel):
+    allowed_ips: List[str]
+
+@router.put("/users/{user_id}/allowed-ips", response_model=UserSchema)
+async def update_user_allowed_ips(
+    user_id: uuid.UUID,
+    ip_update: UserIPUpdate,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """
+    Update a user's allowed IPs. Admins only.
+    Note: Changes here might be overwritten by sync from Response Network 
+    unless also updated there.
+    """
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    user.allowed_ips = ip_update.allowed_ips
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
 
 
 # ============ NO PASSWORD MANAGEMENT HERE ============

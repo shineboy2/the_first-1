@@ -114,6 +114,9 @@ export interface RequestType {
   max_items_per_request: number;
   available_indices: string[];
   elasticsearch_query_template: Record<string, unknown> | null;
+  execution_method?: string;
+  external_api_id?: string | null;
+  file_request_config_id?: string | null;
   parameters?: Array<{
     name: string;
     description?: string;
@@ -402,7 +405,7 @@ export const requestService = {
     return response.data;
   },
 
-  async createRequestType(data: { name: string; description?: string; is_active?: boolean }): Promise<RequestType> {
+  async createRequestType(data: { name: string; description?: string; is_active?: boolean; execution_method?: string }): Promise<RequestType> {
     const response = await api.post("/api/v1/request-types/", data);
     return response.data;
   },
@@ -1040,6 +1043,33 @@ export const fileRequestConfigService = {
   },
 };
 
+export interface AuditLog {
+  id: number;
+  user_id: string | null;
+  action: string;
+  resource_type: string | null;
+  resource_id: string | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  request_data: any | null;
+  response_status: number | null;
+  meta: any | null;
+  created_at: string;
+}
+
+export const auditLogService = {
+  async getLogs(params: { user_id?: string; action?: string; limit?: number; skip?: number } = {}) {
+    const searchParams = new URLSearchParams();
+    if (params.user_id) searchParams.append("user_id", params.user_id);
+    if (params.action) searchParams.append("action", params.action);
+    if (params.limit) searchParams.append("limit", params.limit.toString());
+    if (params.skip) searchParams.append("skip", params.skip.toString());
+    
+    const response = await api.get(`/api/v1/audit-logs/?${searchParams.toString()}`);
+    return response.data;
+  }
+};
+
 const adminApi = {
   healthService,
   statsService,
@@ -1058,7 +1088,7 @@ const adminApi = {
   elasticsearchConfigService,
   ftpProfileService,
   fileRequestConfigService,
+  auditLogService,
 };
 
 export default adminApi;
-

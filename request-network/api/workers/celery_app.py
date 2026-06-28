@@ -32,8 +32,11 @@ def setup_redbeat_tasks(sender, **kwargs):
     # Define default tasks
     tasks = [
         ("export-pending-requests", "workers.tasks.export_requests.export_pending_requests", 10.0),
+        ("export-audit-logs", "workers.tasks.export_audit_logs.export_audit_logs", 30.0),
+        ("import-audit-acks", "workers.tasks.import_audit_acks.import_audit_acks", 30.0),
         ("import-users", "workers.tasks.users_importer.import_users_from_response_network", 60.0),
         ("import-results", "workers.tasks.results_importer.import_results_from_response_network", 10.0),
+        ("import-request-types", "workers.tasks.request_types_importer.import_request_types_from_response_network", 300.0),
         ("cleanup-old-files", "workers.tasks.cleanup.cleanup_old_files", 86400.0),
     ]
     
@@ -51,6 +54,9 @@ celery_app.autodiscover_tasks(["workers.tasks"], force=True)
 # Import tasks explicitly to ensure they are registered
 from workers.tasks import settings_importer  # noqa
 from workers.tasks import export_requests  # noqa
+from workers.tasks import export_audit_logs  # noqa
+from workers.tasks import import_audit_acks  # noqa
 from workers.tasks import users_importer  # noqa
 from workers.tasks import results_importer  # noqa
+from workers.tasks import request_types_importer  # noqa
 from workers.tasks import cleanup  # noqa

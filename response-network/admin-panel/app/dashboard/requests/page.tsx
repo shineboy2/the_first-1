@@ -144,7 +144,7 @@ export default function RequestsPage() {
     const normalized = status.toLowerCase();
     if (normalized === "completed_success") return "موفق ✓";
     if (normalized === "completed_error") return "تکمیل شده (خطا)";
-    if (normalized === "completed") return "موفق";
+    if (normalized === "completed") return "کامل شده";
     if (normalized === "processing") return "درحال پردازش";
     if (normalized === "failed") return "ناموفق";
     if (normalized === "pending") return "درانتظار";
@@ -363,7 +363,7 @@ export default function RequestsPage() {
                                   API: {(request as any).api_name || 'External'}
                                 </Badge>
                               )}
-                              {!(request as any).is_external_api && request.query_type !== 'external_api' && (
+                              {!(request as any).is_external_api && request.query_type === 'elasticsearch' && (
                                 <Badge variant="outline" className="bg-blue-50 text-blue-700 dark:bg-blue-900 dark:text-blue-200">
                                   Elasticsearch
                                 </Badge>

@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { statsService } from "@/lib/services/admin-api";
-import type { SystemStats, SyncStatus } from "@/lib/services/admin-api";
-import { Loader2, CheckCircle2, XCircle, Clock, Users, Activity, Layers, BarChart3, Database } from "lucide-react";
+import { statsService, requestService } from "@/lib/services/admin-api";
+import type { SystemStats, SyncStatus, RequestData } from "@/lib/services/admin-api";
+import { Loader2, CheckCircle2, XCircle, Clock, Users, Activity, Layers, BarChart3, Database, AlertCircle, RefreshCw } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import {
   BarChart,
   Bar,
@@ -43,6 +44,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
+  const [userRequests, setUserRequests] = useState<RequestData[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -63,13 +65,24 @@ export default function DashboardPage() {
       }
     };
 
+    const fetchUserData = async () => {
+      try {
+        setLoading(true);
+        const data = await requestService.getUserRequests(0, 10);
+        setUserRequests(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.error("Error fetching user requests:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     if (user) {
       if (user.profile_type !== 'admin') {
-        // Regular users don't see the full admin stats, they see a simple welcome
-        setLoading(false);
-        return;
+        fetchUserData();
+      } else {
+        fetchData();
       }
-      fetchData();
     }
   }, [user]);
 
@@ -82,17 +95,134 @@ export default function DashboardPage() {
 
   // Render minimal dashboard for non-admins
   if (user.profile_type !== 'admin') {
-    return (
-      <div className="p-8 space-y-6 max-w-4xl mx-auto mt-12">
-        <div className="text-center space-y-4">
-          <h1 className="text-4xl font-bold">خوش آمدید، {user.username}!</h1>
-          <p className="text-xl text-gray-500">به پنل کاربری شبکه Request خوش آمدید.</p>
+    // Calculate stats from the first few requests or maybe just use what we have
+    // Actually we fetched 10 recent requests, we could summarize them or just show them.
+    // Let's do a simple count by status based on the fetched recent requests (just for a quick chart)
+    const userStatusCounts = userRequests.reduce((acc, req) => {
+      const status = req.status.toLowerCase();
+      // Group completed_success and completed_error into completed, or keep separate?
+      // Based on STATUS_COLORS, we have completed, failed, pending.
+      if (status.includes("success")) acc.completed = (acc.completed || 0) + 1;
+      else if (status.includes("error") || status === "failed") acc.failed = (acc.failed || 0) + 1;
+      else if (status === "pending" || status === "processing") acc.pending = (acc.pending || 0) + 1;
+      else acc.completed = (acc.completed || 0) + 1; // Default
+      return acc;
+    }, {} as Record<string, number>);
 
-          <div className="pt-8 flex justify-center gap-4">
-            <Button size="lg" onClick={() => router.push('/dashboard/requests')}>مشاهده درخواست‌های من</Button>
-            <Button size="lg" variant="outline" onClick={() => router.push('/dashboard/requests/new')}>ثبت درخواست جدید</Button>
+    const userChartData = [
+      { name: 'موفق', value: userStatusCounts.completed || 0, color: STATUS_COLORS.completed },
+      { name: 'در حال پردازش', value: userStatusCounts.pending || 0, color: STATUS_COLORS.pending },
+      { name: 'خطا', value: userStatusCounts.failed || 0, color: STATUS_COLORS.failed },
+    ].filter(d => d.value > 0);
+
+    const getStatusBadge = (status: string) => {
+      const normalized = status.toLowerCase();
+      if (normalized === "completed_success") {
+          return <Badge className="bg-green-100 text-green-800 hover:bg-green-100 border-green-200">موفق ✓</Badge>;
+      }
+      if (normalized === "completed_error" || normalized === "completed") {
+          return <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100 border-orange-200">تکمیل شده (خطا)</Badge>;
+      }
+      if (normalized === "failed") {
+          return <Badge variant="destructive" className="bg-red-100 text-red-800 hover:bg-red-100 border-red-200">خطا</Badge>;
+      }
+      if (normalized === "processing") {
+          return <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-100 border-blue-200">درحال پردازش</Badge>;
+      }
+      return <Badge variant="secondary" className="bg-amber-100 text-amber-800 hover:bg-amber-100 border-amber-200">درانتظار</Badge>;
+    };
+
+    return (
+      <div className="p-8 space-y-6 max-w-6xl mx-auto mt-4">
+        <div className="flex flex-col md:flex-row items-center justify-between bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border">
+          <div className="space-y-2">
+            <h1 className="text-3xl font-bold">خوش آمدید، {user.username}!</h1>
+            <p className="text-gray-500">به پنل کاربری شبکه Request خوش آمدید.</p>
+          </div>
+          <div className="mt-4 md:mt-0 flex gap-4">
+            <Button onClick={() => router.push('/dashboard/requests')}>همه درخواست‌ها</Button>
+            <Button variant="outline" onClick={() => router.push('/dashboard/requests/new')}>ثبت درخواست جدید</Button>
           </div>
         </div>
+
+        {loading ? (
+          <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-blue-500" /></div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <Card className="col-span-1 shadow-sm">
+              <CardHeader>
+                <CardTitle>وضعیت درخواست‌های اخیر</CardTitle>
+              </CardHeader>
+              <CardContent className="h-[250px] flex items-center justify-center">
+                {userChartData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={userChartData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {userChartData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => [`${value} درخواست`, 'تعداد']} />
+                      <Legend verticalAlign="bottom" height={36} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-muted-foreground text-sm">درخواستی برای نمایش نمودار یافت نشد.</div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="col-span-1 lg:col-span-2 shadow-sm">
+              <CardHeader>
+                <CardTitle>آخرین درخواست‌های شما</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {userRequests.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>شناسه</TableHead>
+                          <TableHead>نوع درخواست</TableHead>
+                          <TableHead>وضعیت</TableHead>
+                          <TableHead>تاریخ ثبت</TableHead>
+                          <TableHead></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {userRequests.slice(0, 5).map((req) => (
+                          <TableRow key={req.id}>
+                            <TableCell className="font-mono text-xs">{req.id.split("-")[0]}...</TableCell>
+                            <TableCell>{req.query_type}</TableCell>
+                            <TableCell>{getStatusBadge(req.status)}</TableCell>
+                            <TableCell className="text-xs text-gray-500" dir="ltr">
+                              {new Date(req.created_at).toLocaleString("fa-IR")}
+                            </TableCell>
+                            <TableCell>
+                              <Button variant="ghost" size="sm" onClick={() => router.push(`/dashboard/requests/${req.id}`)}>
+                                جزئیات
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">شما هنوز درخواستی ثبت نکرده‌اید.</div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
     );
   }
@@ -129,6 +259,7 @@ export default function DashboardPage() {
             <span className="text-sm border rounded-full px-3 py-1 bg-gray-100 dark:bg-gray-700">
               {user.username} ({user.profile_type})
             </span>
+            <Button variant="outline" size="sm" onClick={handleLogout}>خروج</Button>
           </div>
         </div>
       </div>

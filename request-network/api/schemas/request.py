@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict, computed_field
 
-from .response import ResponsePublic
+from .response import ResponsePublic, ResponseDetailed
 
 
 from typing import Dict, Any
@@ -72,3 +72,9 @@ class RequestPublic(BaseModel):
             return "processing"
         
         return self.status.lower()
+
+class RequestDetailed(RequestPublic):
+    """
+    Schema for displaying a request's full details, including response data.
+    """
+    response: ResponseDetailed | None = None

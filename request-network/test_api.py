@@ -1,11 +1,19 @@
-import requests
+import os
+from fastapi.testclient import TestClient
+from api.main import app
+from api.db.session import SessionLocal
+from api.models.user import User
 
-def test():
-    # Login
-    url = "http://localhost:8001/api/v1/auth/login"
-    data = {"username": "admin@airline.com", "password": "123"}
-    # Wait, the user said they couldn't login. Ah! Wait!
-    # They said: "سمت شبکه درخواست نمیتونم لاگین کنم:"
-    # And then I added Captcha! So login requires captcha.
-    # Let me bypass login and just hit the endpoints from inside the app if possible, but FastAPI requires auth.
-    pass
+client = TestClient(app)
+
+db = SessionLocal()
+user = db.query(User).filter(User.username == "admin").first()
+
+if user:
+    from api.auth.utils import create_access_token
+    token = create_access_token(data={"sub": user.username})
+    response = client.get("/api/v1/request-types/", headers={"Authorization": f"Bearer {token}"})
+    print(response.status_code)
+    print(response.json())
+else:
+    print("No admin user found")

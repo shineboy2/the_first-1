@@ -114,6 +114,16 @@ class RateLimiter:
             "day": f"rate_limit:{user_id}:day:{now.strftime('%Y%m%d')}",
         }
 
+    def _get_subuser_window_keys(self, enterprise_id: str, subuser_id: str) -> Dict[str, str]:
+        """Generate Redis keys for subuser windows"""
+        now = datetime.utcnow()
+        return {
+            "minute": f"rate_limit:subuser:{enterprise_id}:{subuser_id}:minute:{now.strftime('%Y%m%d%H%M')}",
+            "hour": f"rate_limit:subuser:{enterprise_id}:{subuser_id}:hour:{now.strftime('%Y%m%d%H')}",
+            "day": f"rate_limit:subuser:{enterprise_id}:{subuser_id}:day:{now.strftime('%Y%m%d')}",
+        }
+
+
     async def check_limit(
         self, user_id: str, profile: str = "free"
     ) -> Tuple[LimitLevel, Dict]:
@@ -232,6 +242,58 @@ class RateLimiter:
             
         except Exception as e:
             logger.warning(f"Error incrementing counter for user {user_id}: {e}")
+
+    async def increment_subuser_counter(self, enterprise_id: str, subuser_id: str) -> None:
+        """Increment counters for a sub-user"""
+        try:
+            keys = self._get_subuser_window_keys(enterprise_id, subuser_id)
+            pipeline = self.redis.pipeline()
+            pipeline.incr(keys["minute"])
+            pipeline.expire(keys["minute"], 60)
+            pipeline.incr(keys["hour"])
+            pipeline.expire(keys["hour"], 3600)
+            pipeline.incr(keys["day"])
+            pipeline.expire(keys["day"], 86400)
+            await pipeline.execute()
+        except Exception as e:
+            logger.warning(f"Error incrementing counter for subuser {subuser_id}: {e}")
+
+    async def check_subuser_limit(
+        self, enterprise_id: str, subuser_id: str, limits: Dict[str, int]
+    ) -> Tuple[LimitLevel, Dict]:
+        """
+        Check Rate Limit for a Sub-user
+        """
+        try:
+            keys = self._get_subuser_window_keys(enterprise_id, subuser_id)
+            counts = {
+                "minute": int(await self.redis.get(keys["minute"]) or 0),
+                "hour": int(await self.redis.get(keys["hour"]) or 0),
+                "day": int(await self.redis.get(keys["day"]) or 0),
+            }
+            
+            # Subusers only use Hard Blocks for simplicity (or we can use soft block, but let's stick to hard block)
+            for window in ["minute", "hour", "day"]:
+                if counts[window] >= limits[window]:
+                    return LimitLevel.EXCEEDED, {
+                        "remaining_minute": max(0, limits["minute"] - counts["minute"]),
+                        "remaining_hour": max(0, limits["hour"] - counts["hour"]),
+                        "remaining_day": max(0, limits["day"] - counts["day"]),
+                        "hit_limit": window,
+                        "message": f"Subuser Rate limit exceeded for {window}",
+                    }
+            
+            return LimitLevel.OK, {
+                "remaining_minute": limits["minute"] - counts["minute"],
+                "remaining_hour": limits["hour"] - counts["hour"],
+                "remaining_day": limits["day"] - counts["day"],
+                "hit_limit": None,
+                "message": "Subuser Rate limit OK",
+            }
+            
+        except Exception as e:
+            logger.error(f"Error checking subuser limit for {subuser_id}: {e}")
+            return LimitLevel.OK, {"message": "Rate limit check failed"}
 
     async def activate_soft_block(self, user_id: str, window: str = "hour") -> None:
         """

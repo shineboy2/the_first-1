@@ -86,7 +86,7 @@ export function CreateUserDialog({
             try {
                 setLoadingProfileTypes(true);
                 const types = await profileTypeService.getProfileTypes();
-                setProfileTypes(types.filter(pt => pt.is_active));
+                setProfileTypes(types.filter(pt => pt.is_active && pt.name !== "admin"));
             } catch (error) {
                 console.error("Error fetching profile types:", error);
             } finally {

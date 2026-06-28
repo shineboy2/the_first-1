@@ -224,6 +224,9 @@ async def test_operation(
         elif operation_type == "result_import":
             from workers.tasks.results_importer import import_results_from_response_network
             task = import_results_from_response_network.delay()
+        elif operation_type == "request_types_import":
+            from workers.tasks.request_types_importer import import_request_types_from_response_network
+            task = import_request_types_from_response_network.delay()
         else:
             return {"success": False, "message": "Unknown operation type"}
         

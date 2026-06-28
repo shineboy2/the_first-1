@@ -30,6 +30,7 @@ from routers import elasticsearch_config
 from routers import admin_celery
 from routers import ftp_profile_router
 from routers import file_request_config_router
+from routers import audit_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -146,6 +147,9 @@ app.include_router(admin_exports.router, prefix=settings.API_V1_STR, dependencie
 
 # Elasticsearch Configuration router
 app.include_router(elasticsearch_config.router, prefix=settings.API_V1_STR, dependencies=[Depends(oauth2_scheme)])
+
+# Audit Logs router
+app.include_router(audit_router.router, prefix=settings.API_V1_STR, dependencies=[Depends(oauth2_scheme)])
 
 # FTP Profile management router
 app.include_router(ftp_profile_router.router, prefix=settings.API_V1_STR, dependencies=[Depends(oauth2_scheme)])

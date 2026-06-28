@@ -15,7 +15,7 @@ from models.request import Request
 from models.response import Response
 from auth.dependencies import get_current_active_user
 
-from schemas.request import RequestCreate, RequestPublic, RequestStatus
+from schemas.request import RequestCreate, RequestPublic, RequestStatus, RequestDetailed
 from schemas.response import ResponseDetailed
 
 router = APIRouter(prefix="/requests", tags=["Requests"])
@@ -147,13 +147,13 @@ async def get_request_or_404(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
     
     # A real app might allow admins to see any request, but for now, only owners can.
-    if request.user_id != current_user.id:
+    if request.user_id != current_user.id and current_user.profile_type != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to access this request")
 
     return request
 
 
-@router.get("/{request_id}", response_model=RequestPublic)
+@router.get("/{request_id}", response_model=RequestDetailed)
 async def get_request_details(
     request_id: uuid.UUID,
     current_user: Annotated[User, Depends(get_current_active_user)],

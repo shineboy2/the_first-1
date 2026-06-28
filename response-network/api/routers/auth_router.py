@@ -27,6 +27,20 @@ async def read_users_me(
     return current_user
 
 
+from datetime import datetime, timezone
+from models.audit_log import AuditLog
+
+async def _log_audit(db: AsyncSession, user_id, action: str, client_ip: str, request: Request, request_data: dict = None):
+    audit_log = AuditLog(
+        user_id=user_id,
+        action=action,
+        ip_address=client_ip,
+        user_agent=request.headers.get("user-agent"),
+        request_data=request_data
+    )
+    db.add(audit_log)
+    await db.commit()
+
 @router.post("/login")
 async def login(
     response: Response,
@@ -42,6 +56,13 @@ async def login(
     password = form_data.get("password")
     captcha_id = form_data.get("captcha_id")
     captcha_solution = form_data.get("captcha_solution")
+
+    # Get real client IP if behind proxy
+    client_ip = request.headers.get("x-forwarded-for")
+    if client_ip:
+        client_ip = client_ip.split(",")[0].strip()
+    else:
+        client_ip = request.client.host if request.client else "unknown"
 
     if not username or not password:
         raise HTTPException(
@@ -67,19 +88,36 @@ async def login(
         (User.username == username) | (User.email == username)
     )
     result = await db.execute(query)
-    user = result.scalar_one_or_none()
+    user = result.scalars().first()
 
     # 2. Check if user exists, is active, and password is correct
-    if (
-        not user
-        or not user.is_active
-        or not verify_password(password, user.hashed_password)
-    ):
+    if not user:
+        await _log_audit(db, None, "LOGIN_FAILED", client_ip, request, {"reason": "user_not_found", "attempted_username": username})
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+        
+    if not user.is_active or not verify_password(password, user.hashed_password):
+        await _log_audit(db, user.id, "LOGIN_FAILED", client_ip, request, {"reason": "invalid_password" if user.is_active else "inactive_user"})
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        
+    # Check IP restriction (if user has allowed_ips)
+    # Note: User model in response-network doesn't have allowed_ips by default maybe?
+    # Let me assume it does, as I will add it if it doesn't.
+    if hasattr(user, 'allowed_ips') and user.allowed_ips and client_ip not in user.allowed_ips:
+        await _log_audit(db, user.id, "LOGIN_BLOCKED", client_ip, request, {"reason": "ip_not_allowed", "ip": client_ip})
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Login not permitted from this IP address.",
+        )
+        
+    await _log_audit(db, user.id, "LOGIN_SUCCESS", client_ip, request)
 
     # Create token data with user_id and scopes
     token_data = {

@@ -28,6 +28,8 @@ class ImportStorageService:
             config_key = "settings_import_config"
         elif resource_type == "users":
             config_key = "user_import_config"
+        elif resource_type == "request_types":
+            config_key = "request_types_import_config"
         
         result = db.execute(select(Settings).where(Settings.key == config_key))
         setting = result.scalar_one_or_none()

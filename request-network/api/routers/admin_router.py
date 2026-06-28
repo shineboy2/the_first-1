@@ -1,6 +1,6 @@
-from typing import Annotated
+from typing import Annotated, List, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, case, select
 from sqlalchemy.ext.asyncio import AsyncSession
 import os
@@ -39,7 +39,7 @@ async def get_system_stats(
     # 1. Get user stats
     user_stats_stmt = select(
         func.count(User.id).label("total_users"),
-        func.count(case((User.is_active == True, 1), else_=None)).label("active_users")
+        func.sum(case((User.is_active == True, 1), else_=0)).label("active_users")
     )
     user_stats_result = (await db.execute(user_stats_stmt)).one()
 
@@ -116,6 +116,7 @@ async def get_all_requests(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     skip: int = 0,
     limit: int = 100,
+    user_id: Optional[str] = None,
     _: Annotated[None, Depends(require_admin)] = None
 ):
     """
@@ -123,9 +124,16 @@ async def get_all_requests(
     Requires admin privileges.
     """
     from sqlalchemy.orm import selectinload
+    query = select(Request).order_by(Request.created_at.desc())
+    if user_id:
+        try:
+            import uuid
+            query = query.where(Request.user_id == uuid.UUID(user_id))
+        except ValueError:
+            pass # Invalid UUID, won't match anything anyway
+            
     query = (
-        select(Request)
-        .order_by(Request.created_at.desc())
+        query
         .options(selectinload(Request.response))
         .offset(skip)
         .limit(limit)
@@ -257,7 +265,8 @@ async def get_sync_status(
     
     # 1. Users Sync (Uses .processed_users metadata)
     # Correct path for shared data
-    users_meta_path = Path("/home/docker/the_first/the_first/shared_data/users/.processed_users")
+    shared_data_dir = Path(os.getenv("SHARED_DATA_DIR", "/app/shared_data"))
+    users_meta_path = shared_data_dir / "users" / ".processed_users"
     if users_meta_path.exists():
         try:
             with open(users_meta_path, "r") as f:

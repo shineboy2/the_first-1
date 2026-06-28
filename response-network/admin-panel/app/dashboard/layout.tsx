@@ -44,6 +44,11 @@ const navigation = [
     icon: Users,
   },
   {
+    name: "لاگ‌های ممیزی",
+    href: "/dashboard/audit-logs",
+    icon: Shield,
+  },
+  {
     name: "انواع درخواست",
     href: "/dashboard/request-types",
     icon: FileCode,

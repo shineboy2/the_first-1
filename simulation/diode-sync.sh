@@ -17,7 +17,7 @@ while true; do
     echo "Syncing requests..."
     for file in /ftp-req/requests/*; do
       if [ -f "$file" ] && [ "${file##*.}" != "old" ]; then
-        cp "$file" /ftp-resp/requests/ 2>/dev/null
+        cp "$file" /ftp-resp/requests/ 2>/dev/null && chmod 644 /ftp-resp/requests/$(basename "$file") 2>/dev/null
         mv "$file" "$file.old" 2>/dev/null
       fi
     done
@@ -30,7 +30,7 @@ while true; do
       echo "Syncing $dir..."
       for file in /ftp-resp/$dir/*; do
         if [ -f "$file" ] && [ "${file##*.}" != "old" ]; then
-          cp "$file" /ftp-req/$dir/ 2>/dev/null
+          cp "$file" /ftp-req/$dir/ 2>/dev/null && chmod 644 /ftp-req/$dir/$(basename "$file") 2>/dev/null
           mv "$file" "$file.old" 2>/dev/null
         fi
       done

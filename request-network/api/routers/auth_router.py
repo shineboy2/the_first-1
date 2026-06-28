@@ -5,8 +5,9 @@ from pathlib import Path
 import structlog
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Form
 from fastapi.security import OAuth2PasswordBearer
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -32,47 +33,48 @@ log = structlog.get_logger(__name__)
 MAX_FAILED_ATTEMPTS = 5
 LOCKOUT_MINUTES = 15
 
-@router.post("/login", response_model=Token)
+class MachineLoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+@router.post(
+    "/login",
+    response_model=Token,
+    summary="User Login (UI)",
+    description="لاگین از طریق رابط کاربری. کپچا الزامی است.",
+)
 async def login_for_access_token(
     request: Request,
+    username: str = Form(..., description="نام کاربری یا ایمیل"),
+    password: str = Form(..., description="رمز عبور"),
+    captcha_id: str = Form(..., description="شناسه کپچا از GET /captcha/"),
+    captcha_solution: str = Form(..., description="متن خوانده‌شده از تصویر کپچا"),
     db: AsyncSession = Depends(get_db_session),
 ):
     """
     Authenticates a user and returns a JWT access token.
-    Includes security checks: Lockout, audit logging, concurrent session prevention.
+    Includes security checks: Captcha, Lockout, IP restriction, audit logging, concurrent session prevention.
     """
-    form_data = await request.form()
-    username = form_data.get("username")
-    password = form_data.get("password")
-    captcha_id = form_data.get("captcha_id")
-    captcha_solution = form_data.get("captcha_solution")
-    client_ip = request.client.host if request.client else "unknown"
-
-    if not username or not password:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username and password are required",
-        )
+    # Get real client IP if behind proxy
+    client_ip = request.headers.get("x-forwarded-for")
+    if client_ip:
+        client_ip = client_ip.split(",")[0].strip()
+    else:
+        client_ip = request.client.host if request.client else "unknown"
 
     # Verify Captcha
-    if not captcha_id or not captcha_solution:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="کپچا الزامی است (Captcha is required)",
-        )
-        
     if not verify_captcha(captcha_id, captcha_solution):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="کپچا اشتباه است یا منقضی شده است (Invalid or expired captcha)",
         )
 
-    # 1. Find the user by username or email
     query = select(User).where(
         (User.username == username) | (User.email == username)
     )
     result = await db.execute(query)
-    user = result.scalar_one_or_none()
+    user = result.scalars().first()
 
     # If user doesn't exist, we don't want to leak this information, but we log it
     if not user:
@@ -151,6 +153,118 @@ async def login_for_access_token(
     )
 
     # Save new active session
+    try:
+        redis_client.setex(old_session_key, int(access_token_expires.total_seconds()), access_token)
+    except Exception:
+        pass
+
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.post(
+    "/token",
+    response_model=Token,
+    summary="Machine/API Login (بدون کپچا)",
+    description=(
+        "لاگین برنامه‌نویسی برای استفاده ماشینی و یکپارچه‌سازی API. "
+        "کپچا ندارد ولی تمام چک‌های امنیتی دیگر (lockout، IP restriction، audit log) اعمال می‌شوند. "
+        "توکن برگشتی JWT است و با `Authorization: Bearer <token>` در سایر endpointها استفاده می‌شود."
+    ),
+)
+async def machine_login(
+    request: Request,
+    body: MachineLoginRequest,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """
+    Authenticates a machine client and returns a JWT access token.
+    No captcha required. All other security checks apply: lockout, IP restriction, audit logging.
+    """
+    client_ip = request.headers.get("x-forwarded-for")
+    if client_ip:
+        client_ip = client_ip.split(",")[0].strip()
+    else:
+        client_ip = request.client.host if request.client else "unknown"
+
+    username = body.username
+    password = body.password
+
+    query = select(User).where(
+        (User.username == username) | (User.email == username)
+    )
+    result = await db.execute(query)
+    user = result.scalars().first()
+
+    if not user:
+        await _log_audit(db, None, "LOGIN_FAILED", client_ip, request, {"reason": "user_not_found", "attempted_username": username, "source": "machine"})
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Check lockout
+    now = datetime.now(timezone.utc)
+    if user.locked_until and user.locked_until > now:
+        await _log_audit(db, user.id, "LOGIN_BLOCKED", client_ip, request, {"reason": "account_locked", "source": "machine"})
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is locked. Try again later.",
+        )
+
+    # Check password
+    if not user.verify_password(password):
+        user.failed_login_attempts += 1
+        if user.failed_login_attempts >= MAX_FAILED_ATTEMPTS:
+            user.locked_until = now + timedelta(minutes=LOCKOUT_MINUTES)
+            user.failed_login_attempts = 0
+            await _log_audit(db, user.id, "ACCOUNT_LOCKED", client_ip, request, {"reason": "max_failed_attempts", "source": "machine"})
+        else:
+            await _log_audit(db, user.id, "LOGIN_FAILED", client_ip, request, {"reason": "invalid_password", "source": "machine"})
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Reset counters & update info
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    user.last_login_ip = client_ip
+    user.last_login_date = now
+
+    # IP restriction check
+    if user.allowed_ips and client_ip not in user.allowed_ips:
+        await _log_audit(db, user.id, "LOGIN_BLOCKED", client_ip, request, {"reason": "ip_not_allowed", "ip": client_ip, "source": "machine"})
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Login not permitted from this IP address.",
+        )
+
+    await db.commit()
+    await _log_audit(db, user.id, "LOGIN_SUCCESS", client_ip, request, {"source": "machine"})
+
+    # Invalidate old session
+    old_session_key = f"active_session:{user.id}"
+    try:
+        old_token = redis_client.get(old_session_key)
+        if old_token:
+            blocklist_token(old_token)
+    except Exception as e:
+        log.warning("Could not invalidate old session in Redis", error=str(e))
+
+    # Create access token
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={
+            "sub": user.username,
+            "user_id": str(user.id),
+            "scopes": ["admin"] if getattr(user, "profile_type", "") == "admin" else ["user"],
+        },
+        expires_delta=access_token_expires,
+    )
+
     try:
         redis_client.setex(old_session_key, int(access_token_expires.total_seconds()), access_token)
     except Exception:

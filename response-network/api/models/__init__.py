@@ -17,6 +17,7 @@ from .sync_history import SyncHistory
 from .ftp_profile import FTPProfile
 from .file_request_config import FileRequestConfig
 from .file_request import FileRequest
+from .audit_log import AuditLog
 
 __all__ = [
     "User",
@@ -25,6 +26,7 @@ __all__ = [
     "QueryResult",
     "Settings",
     "UserSettings",
+    "AuditLog",
     "RequestType",
     "RequestTypeParameter",
     "UserRequestAccess",

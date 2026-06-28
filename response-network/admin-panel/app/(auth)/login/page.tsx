@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, Loader2, Lock, Mail } from "lucide-react";
+import { AlertCircle, Loader2, Lock, Mail, Eye, EyeOff } from "lucide-react";
 import { useTheme } from "next-themes";
 import Image from "next/image";
 
@@ -36,6 +36,7 @@ export default function LoginPage() {
   const [mounted, setMounted] = useState(false);
   const [captchaId, setCaptchaId] = useState("");
   const [captchaImage, setCaptchaImage] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const fetchCaptcha = async () => {
     try {
@@ -196,12 +197,12 @@ export default function LoginPage() {
                     <FormLabel className="text-gray-200">نام کاربری</FormLabel>
                     <FormControl>
                       <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                        <Mail className="absolute top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" style={{ right: '0.75rem' }} />
                         <Input
                           placeholder="نام کاربری یا ایمیل"
                           {...field}
                           disabled={isLoading}
-                          className="pl-10 bg-gray-700 border-gray-600 text-white placeholder:text-gray-400 focus:border-blue-500"
+                          className="pr-10 pl-3 bg-gray-700 border-gray-600 text-white placeholder:text-gray-400 focus:border-blue-500"
                         />
                       </div>
                     </FormControl>
@@ -219,14 +220,22 @@ export default function LoginPage() {
                     <FormLabel className="text-gray-200">رمز عبور</FormLabel>
                     <FormControl>
                       <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                        <Lock className="absolute top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" style={{ right: '0.75rem' }} />
                         <Input
-                          type="password"
+                          type={showPassword ? "text" : "password"}
                           placeholder="رمز عبور"
                           {...field}
                           disabled={isLoading}
-                          className="pl-10 bg-gray-700 border-gray-600 text-white placeholder:text-gray-400 focus:border-blue-500"
+                          className="pr-10 pl-10 bg-gray-700 border-gray-600 text-white placeholder:text-gray-400 focus:border-blue-500"
                         />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 focus:outline-none"
+                          style={{ left: '0.75rem' }}
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
                       </div>
                     </FormControl>
                     <FormMessage />

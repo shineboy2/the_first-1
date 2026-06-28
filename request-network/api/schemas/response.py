@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict
+from typing import Any
 
 
 class ResponsePublic(BaseModel):
@@ -15,6 +16,7 @@ class ResponsePublic(BaseModel):
     received_at: datetime
     has_error: bool = False
     error_message: str | None = None
+    execution_time_ms: int | None = None
 
 
 class ResponseDetailed(ResponsePublic):
@@ -22,6 +24,6 @@ class ResponseDetailed(ResponsePublic):
     Schema for displaying full response details including result data.
     Used by GET /requests/{id}/response endpoint.
     """
-    result_data: dict | None = None
+    result_data: dict | str | list | Any | None = None
     is_cached: bool = False
     cache_key: str | None = None

@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-import { requestService, requestTypeService, RequestTypeInfo, RequestTypeParam } from "@/lib/services/admin-api";
+import { requestService, requestTypeService, RequestType } from "@/lib/services/admin-api";
 import { DynamicField } from "@/components/dynamic-field";
 
 export default function NewRequestPage() {
@@ -49,7 +49,7 @@ export default function NewRequestPage() {
     const [error, setError] = useState<string | null>(null);
 
     // Request Types State
-    const [requestTypes, setRequestTypes] = useState<RequestTypeInfo[]>([]);
+    const [requestTypes, setRequestTypes] = useState<RequestType[]>([]);
     const [selectedType, setSelectedType] = useState<string>("_raw");
     const [formValues, setFormValues] = useState<Record<string, any>>({});
 
@@ -65,11 +65,12 @@ export default function NewRequestPage() {
     const loadRequestTypes = async () => {
         try {
             setInitLoading(true);
-            const types = await requestTypeService.getAll();
-            setRequestTypes(types || []);
+            // TODO: Temporary fix to enforce manual entry until request types are synced from Response Network
+            setRequestTypes([]);
+            setSelectedType("_raw");
+            setServiceName("");
         } catch (err) {
             console.error("Error loading request types:", err);
-            // Non-fatal, fallback to raw mode
         } finally {
             setInitLoading(false);
         }
@@ -163,7 +164,7 @@ export default function NewRequestPage() {
                 }
             };
 
-            await requestService.submitRequest(requestData);
+            await requestService.createRequest(requestData);
             router.push("/dashboard/requests");
 
         } catch (err: any) {

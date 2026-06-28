@@ -107,8 +107,8 @@ def execute_pending_queries(self):
                     continue
 
                 # Check if it is an external API call
-                if req.query_type == "external_api":
-                    external_api_name = (req.query_params or {}).get("api_type")
+                if req.query_type == "external_api" or (file_req_type and file_req_type.execution_method == "external_api"):
+                    external_api_name = (req.query_params or {}).get("api_type") if req.query_type == "external_api" else req.query_type
                     if not external_api_name:
                          raise ValueError("api_type not provided in query_params for external_api request")
                          

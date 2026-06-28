@@ -30,6 +30,7 @@ from routers import users as users_router  # Import users router
 from routers import external_request
 from routers import captcha_router
 from router import monitoring_router
+from routers import audit_router
 from shared.logger import get_logger
 from custom_swagger import get_swagger_ui_html
 
@@ -95,6 +96,7 @@ app.include_router(settings_router.router, prefix=settings.API_V1_STR)
 app.include_router(external_request.router, prefix=settings.API_V1_STR)
 app.include_router(api_key_router.router, prefix=settings.API_V1_STR)
 app.include_router(request_types_router.router, prefix=settings.API_V1_STR)
+app.include_router(audit_router.router, prefix=settings.API_V1_STR)
 app.include_router(monitoring_router, prefix=settings.API_V1_STR)
 
 # Admin Imports router

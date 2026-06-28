@@ -15,6 +15,7 @@ import {
   RefreshCw,
   AlertCircle,
   ArrowUpDown,
+  Activity,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -411,6 +412,10 @@ export default function UsersPage() {
                                 <DropdownMenuItem onClick={() => handleRequestAccessClick(user)}>
                                   <ShieldAlert className="ml-2 h-4 w-4" />
                                   دسترسی‌ها
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => router.push(`/dashboard/audit-logs?user_id=${user.id}`)}>
+                                  <Activity className="ml-2 h-4 w-4" />
+                                  لاگ‌ها
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
