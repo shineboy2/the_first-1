@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 
 from core.dependencies import get_db
-from models.schemas import (
+from models.pydantic_schemas import (
     RequestStats,
     QueryStats,
     SystemHealth,

@@ -9,6 +9,7 @@ class ExternalAPIBase(BaseModel):
     endpoint_url: str = Field(..., max_length=500, description="The full URL for the API endpoint")
     http_method: str = Field(default="POST", max_length=20)
     is_active: bool = Field(default=True)
+    handler_class: str = Field(default="generic", max_length=100, description="Handler class for complex APIs")
     
     # Auth configuration
     auth_type: str = Field(default="none", description="Options: 'none', 'static_key', 'dynamic_token'")
@@ -25,6 +26,7 @@ class ExternalAPIUpdate(BaseModel):
     endpoint_url: Optional[str] = Field(None, max_length=500)
     http_method: Optional[str] = Field(None, max_length=20)
     is_active: Optional[bool] = None
+    handler_class: Optional[str] = Field(None, max_length=100)
     auth_type: Optional[str] = None
     auth_config: Optional[Dict[str, Any]] = None
     static_headers: Optional[Dict[str, Any]] = None

@@ -13,6 +13,7 @@ class ExternalAPI(BaseModel, UUIDMixin, TimestampMixin):
     endpoint_url: Mapped[str] = mapped_column(String(500), nullable=False)
     http_method: Mapped[str] = mapped_column(String(20), nullable=False, default="POST")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    handler_class: Mapped[str] = mapped_column(String(100), nullable=False, default="generic")
 
     # Authentication Configuration
     # Options: 'none', 'static_key', 'dynamic_token'

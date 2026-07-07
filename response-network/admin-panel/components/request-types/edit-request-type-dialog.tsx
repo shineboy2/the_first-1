@@ -44,6 +44,8 @@ const formSchema = z.object({
     is_active: z.boolean(),
     version: z.string().min(1, "نسخه الزامی است"),
     max_items_per_request: z.coerce.number().min(1, "حداقل 1").max(10000, "حداکثر 10000"),
+    execution_method: z.string().default("elasticsearch"),
+    external_api_id: z.string().optional().nullable(),
 });
 
 type EditRequestTypeFormData = z.infer<typeof formSchema>;
@@ -62,6 +64,24 @@ export function EditRequestTypeDialog({
     requestType,
 }: EditRequestTypeDialogProps) {
     const [error, setError] = useState<string | null>(null);
+    const [externalApis, setExternalApis] = useState<any[]>([]);
+    const [loadingApis, setLoadingApis] = useState(false);
+
+    useEffect(() => {
+        const fetchExternalApis = async () => {
+            try {
+                setLoadingApis(true);
+                const { externalApiService } = await import('@/lib/services/admin-api');
+                const apis = await externalApiService.getExternalAPIs();
+                setExternalApis(apis);
+            } catch (err) {
+                console.error("Error fetching external apis:", err);
+            } finally {
+                setLoadingApis(false);
+            }
+        };
+        fetchExternalApis();
+    }, []);
 
     const form = useForm<EditRequestTypeFormData>({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -72,8 +92,14 @@ export function EditRequestTypeDialog({
             is_active: requestType?.is_active ?? true,
             version: requestType?.version || "1.0.0",
             max_items_per_request: requestType?.max_items_per_request || 100,
+            // @ts-ignore
+            execution_method: requestType?.execution_method || "elasticsearch",
+            // @ts-ignore
+            external_api_id: requestType?.external_api_id || null,
         },
     });
+
+    const executionMethod = form.watch("execution_method");
 
     useEffect(() => {
         if (open && requestType) {
@@ -83,6 +109,10 @@ export function EditRequestTypeDialog({
                 is_active: requestType.is_active,
                 version: requestType.version || "1.0.0",
                 max_items_per_request: requestType.max_items_per_request || 100,
+                // @ts-ignore
+                execution_method: requestType.execution_method || "elasticsearch",
+                // @ts-ignore
+                external_api_id: requestType.external_api_id || null,
             });
         } else if (!open) {
             form.reset({
@@ -91,6 +121,8 @@ export function EditRequestTypeDialog({
                 is_active: true,
                 version: "1.0.0",
                 max_items_per_request: 100,
+                execution_method: "elasticsearch",
+                external_api_id: null,
             });
             setError(null);
         }
@@ -158,6 +190,66 @@ export function EditRequestTypeDialog({
                                 </FormItem>
                             )}
                         />
+
+                        <FormField
+                            control={form.control}
+                            name="execution_method"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>روش اجرا</FormLabel>
+                                    <Select
+                                        onValueChange={field.onChange}
+                                        defaultValue={field.value}
+                                    >
+                                        <FormControl>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="انتخاب روش اجرا" />
+                                            </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                            <SelectItem value="elasticsearch">پایگاه داده (Elasticsearch)</SelectItem>
+                                            <SelectItem value="external_api">API خارجی (External API)</SelectItem>
+                                            <SelectItem value="file_request">درخواست فایلی (File Request)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+
+                        {executionMethod === "external_api" && (
+                            <FormField
+                                control={form.control}
+                                name="external_api_id"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>API خارجی</FormLabel>
+                                        <Select
+                                            onValueChange={field.onChange}
+                                            defaultValue={field.value || undefined}
+                                        >
+                                            <FormControl>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder={loadingApis ? "در حال دریافت..." : "انتخاب API خارجی"} />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                {externalApis && externalApis.length > 0 ? (
+                                                    externalApis.map(api => (
+                                                        <SelectItem key={api.id} value={api.id}>{api.name}</SelectItem>
+                                                    ))
+                                                ) : (
+                                                    <SelectItem value="none" disabled>
+                                                        {loadingApis ? "در حال دریافت..." : "هیچ API خارجی یافت نشد"}
+                                                    </SelectItem>
+                                                )}
+                                            </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        )}
 
                         <div className="grid grid-cols-2 gap-4">
                             <FormField

@@ -5,7 +5,7 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 
 from core.dependencies import get_db
-from models.schemas import (
+from models.pydantic_schemas import (
     Request, RequestCreate, RequestUpdate, RequestStats,
     PaginatedResponse, RequestPaginatedResponse
 )
@@ -157,13 +157,13 @@ async def retry_all_failed(
         
     # Update all failed requests
     # using explicit update for efficiency
-    from models.schemas import Request as RequestModel # Ensure we use the model class for update
-    # The 'request_service' uses models/schemas.py which seems to import the actual SQLA model?
-    # Let's check imports. 'models.schemas' typically holds Pydantic schemas. 
+    from models.pydantic_schemas import Request as RequestModel # Ensure we use the model class for update
+    # The 'request_service' uses models.pydantic_schemas.py which seems to import the actual SQLA model?
+    # Let's check imports. 'models.pydantic_schemas' typically holds Pydantic schemas. 
     # 'crud.requests' likely returns SQLA objects.
     # We need the SQLA model class for bulk update.
     # Looking at imports: 
-    # from models.schemas import ( Request, ... ) -> This looks like Pydantic.
+    # from models.pydantic_schemas import ( Request, ... ) -> This looks like Pydantic.
     # Real SQLA Model is likely in `models.incoming_request` or similar based on previous steps.
     # Let's import IncomingRequest directly to be safe.
     

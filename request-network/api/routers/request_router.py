@@ -1,7 +1,7 @@
 import uuid
 from typing import List, Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request as FastAPIRequest
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
@@ -28,6 +28,7 @@ rate_limiter = RateLimiter()
     status_code=status.HTTP_201_CREATED)
 async def submit_request(
     request_data: RequestCreate,
+    http_request: FastAPIRequest,
     current_user: Annotated[User, Depends(get_current_active_user)],
     db: AsyncSession = Depends(get_db_session),
 ):
@@ -83,14 +84,36 @@ async def submit_request(
         query_type=request_type
     )
 
+    # 3.7 Extract End-User Metadata
+    sub_user_id = http_request.headers.get("X-End-User-Id") or http_request.headers.get("X-User-Id")
+    sub_user_db_id = None
+    if sub_user_id:
+        from models.subuser import SubUser
+        stmt_sub = select(SubUser).where(
+            SubUser.enterprise_user_id == current_user.id,
+            SubUser.external_user_id == sub_user_id
+        )
+        sub_result = await db.execute(stmt_sub)
+        sub_user = sub_result.scalars().first()
+        if sub_user:
+            sub_user_db_id = sub_user.id
+
+    # Dump all headers into meta
+    meta_data = {
+        "headers": dict(http_request.headers),
+        "client_host": http_request.client.host if http_request.client else None,
+    }
+
     # 4. Create request object
     new_request = Request(
         user_id=current_user.id,
+        sub_user_id=sub_user_db_id,
         name=request_data.name,
         query_type=request_type,
         query_params=query_params_value,
         priority=current_user.priority,  # Inherit priority from user profile
         status=request_data.reqState.lower(),
+        meta=meta_data,
     )
     
     db.add(new_request)

@@ -15,6 +15,13 @@ from sqlalchemy.orm import sessionmaker
 
 from core.config import settings
 
+from models.file_request import FileRequest
+from models.file_request_config import FileRequestConfig
+from models.incoming_request import IncomingRequest
+from models.query_result import QueryResult
+from services.file_request_engine import FileRequestEngine
+from services.ftp_profile_service import FTPProfileService
+
 logger = logging.getLogger(__name__)
 
 # Sync database connection for Celery
@@ -38,13 +45,6 @@ def poll_file_responses(self):
     5. If found: download, parse, store result, mark complete
     6. If not found: check timeout, update poll count
     """
-    from models.file_request import FileRequest
-    from models.file_request_config import FileRequestConfig
-    from models.incoming_request import IncomingRequest
-    from models.query_result import QueryResult
-    from services.file_request_engine import FileRequestEngine
-    from services.ftp_profile_service import FTPProfileService
-
     db = SessionLocal()
     try:
         # 1. Get all waiting file requests

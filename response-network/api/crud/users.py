@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from models.user import User
 from models.request import Request
 from models.profile_type import ProfileType
-from models.schemas import UserCreate, UserUpdate, UserStats
+from models.pydantic_schemas import UserCreate, UserUpdate, UserStats
 from core.security import get_password_hash
 
 async def get_users_with_stats(

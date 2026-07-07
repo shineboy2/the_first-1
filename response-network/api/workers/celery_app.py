@@ -44,6 +44,7 @@ from workers.tasks.users_exporter import export_users_to_request_network
 from workers.tasks.cleanup import cleanup_old_files
 from workers.tasks.file_request_sender import send_file_request
 from workers.tasks.file_request_poller import poll_file_responses
+from workers.tasks.import_audit_logs import import_audit_logs
 
 from celery.signals import beat_init
 

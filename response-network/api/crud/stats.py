@@ -6,7 +6,7 @@ from sqlalchemy.sql import Select
 
 from models.request import Request
 from models.query_result import QueryResult
-from models.schemas import (
+from models.pydantic_schemas import (
     RequestStats,
     QueryStats,
     SystemHealth,

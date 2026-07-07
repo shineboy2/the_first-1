@@ -14,7 +14,7 @@ from db.session import get_db_session
 from models.user import User
 from routers.captcha_router import verify_captcha
 from schemas.user import UserRead
-from models.schemas import Token
+from models.pydantic_schemas import Token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 

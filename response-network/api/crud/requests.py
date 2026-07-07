@@ -5,7 +5,7 @@ from datetime import datetime
 
 from models.incoming_request import IncomingRequest
 from models.user import User
-from models.schemas import RequestStats
+from models.pydantic_schemas import RequestStats
 
 async def get_requests(
     db: AsyncSession,

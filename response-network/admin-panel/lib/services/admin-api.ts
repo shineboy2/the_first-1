@@ -148,6 +148,7 @@ export interface ExternalAPI {
   endpoint_url: string;
   http_method: string;
   is_active: boolean;
+  handler_class: string;
   auth_type: string;
   auth_config: Record<string, any> | null;
   static_headers: Record<string, any> | null;
@@ -396,7 +397,7 @@ export const requestService = {
   },
 
   async getRequestTypes(): Promise<RequestType[]> {
-    const response = await api.get("/api/v1/request-types/");
+    const response = await api.get("/api/v1/request-types/?include_inactive=true");
     return response.data;
   },
 
@@ -778,6 +779,11 @@ export const exportConfigService = storageConfigService;
 // ============================================================================
 
 export const externalApiService = {
+  async getAvailableHandlers(): Promise<{ name: string; description: string }[]> {
+    const response = await api.get("/api/v1/external-apis/handlers/available");
+    return response.data;
+  },
+
   async getExternalAPIs(): Promise<ExternalAPI[]> {
     const response = await api.get("/api/v1/external-apis/");
     return response.data;

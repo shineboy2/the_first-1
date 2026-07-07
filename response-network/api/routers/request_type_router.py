@@ -15,7 +15,8 @@ from schemas.request_type import (
     RequestTypeCreateInitial,
     RequestTypeConfigureParams, 
     RequestTypeConfigureQuery,
-    RequestTypeRead
+    RequestTypeRead,
+    RequestTypeUpdate
 )
 from schemas.request_access import (
     UserRequestAccessRead,
@@ -87,6 +88,52 @@ async def create_request_type(
     db_obj = result.scalar_one()
     
     return db_obj
+
+
+@router.put("/{request_type_id}", response_model=RequestTypeRead)
+async def update_request_type(
+    request_type_id: UUID,
+    update_data: RequestTypeUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Update request type metadata.
+    """
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can update request types"
+        )
+        
+    stmt = select(RequestType).options(selectinload(RequestType.parameters)).where(RequestType.id == request_type_id)
+    result = await db.execute(stmt)
+    req_type = result.scalars().first()
+    
+    if not req_type:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Request type not found"
+        )
+        
+    update_dict = update_data.model_dump(exclude_unset=True)
+    
+    # Check if name already exists for another request type
+    if "name" in update_dict and update_dict["name"] != req_type.name:
+        stmt_check = select(RequestType).where(RequestType.name == update_dict["name"])
+        result_check = await db.execute(stmt_check)
+        if result_check.scalars().first():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Request type with this name already exists"
+            )
+            
+    for key, value in update_dict.items():
+        setattr(req_type, key, value)
+        
+    await db.commit()
+    await db.refresh(req_type)
+    return req_type
 
 
 @router.put("/{type_id}/params", response_model=RequestTypeRead)

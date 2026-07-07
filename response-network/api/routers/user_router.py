@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy import select, delete, and_
 
 from core.dependencies import get_db
-from models.schemas import UserCreate, UserUpdate, User, UserWithStats
+from models.pydantic_schemas import UserCreate, UserUpdate, User, UserWithStats
 from models.user import User as UserModel
 from models.request_type import RequestType
 from models.request_access import UserRequestAccess

@@ -4,7 +4,7 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 
 from core.dependencies import get_db
-from models.schemas import SystemStats, SystemHealth, LogEntry
+from models.pydantic_schemas import SystemStats, SystemHealth, LogEntry
 from models.user import User
 from auth.dependencies import get_current_user, get_current_admin_user
 from crud import system as system_service

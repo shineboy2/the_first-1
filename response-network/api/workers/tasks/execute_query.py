@@ -14,7 +14,7 @@ from models.incoming_request import IncomingRequest
 from models.request_type import RequestType
 from models.query_result import QueryResult
 from models.elasticsearch_config import ElasticsearchConfig
-from services.external_api_handler import ExternalAPIHandler
+# External API handler is now loaded dynamically via HandlerRegistry
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -108,14 +108,27 @@ def execute_pending_queries(self):
 
                 # Check if it is an external API call
                 if req.query_type == "external_api" or (file_req_type and file_req_type.execution_method == "external_api"):
-                    external_api_name = (req.query_params or {}).get("api_type") if req.query_type == "external_api" else req.query_type
-                    if not external_api_name:
-                         raise ValueError("api_type not provided in query_params for external_api request")
+                    from services.handler_registry import HandlerRegistry
+                    from models.external_api import ExternalAPI
+                    
+                    api_config = None
+                    if file_req_type and file_req_type.execution_method == "external_api" and file_req_type.external_api_id:
+                        api_config = db.query(ExternalAPI).get(file_req_type.external_api_id)
+                        if not api_config:
+                            raise ValueError(f"Linked ExternalAPI not found for RequestType '{req.query_type}'")
+                        external_api_name = api_config.name
+                    else:
+                        external_api_name = (req.query_params or {}).get("api_type")
+                        if not external_api_name:
+                             raise ValueError("api_type not provided in query_params for legacy external_api request")
+                        api_config = db.query(ExternalAPI).filter(ExternalAPI.name == external_api_name).first()
+                        if not api_config:
+                            raise ValueError(f"ExternalAPI '{external_api_name}' not found")
                          
-                    handler = ExternalAPIHandler(db)
+                    handler = HandlerRegistry.get_handler(external_api_name, db)
                     
                     start_time = datetime.utcnow()
-                    api_response = handler.execute_api_call(external_api_name, req.query_params or {})
+                    api_response = handler.execute(req.query_params or {}, api_config=api_config)
                     end_time = datetime.utcnow()
                     
                     execution_time = int((end_time - start_time).total_seconds() * 1000)

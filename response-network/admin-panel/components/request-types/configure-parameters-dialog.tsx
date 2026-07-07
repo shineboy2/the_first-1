@@ -32,8 +32,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { requestService } from "@/lib/services/admin-api";
-import type { RequestType } from "@/lib/services/admin-api";
+import { requestService, externalApiService } from "@/lib/services/admin-api";
+import type { RequestType, ExternalAPI } from "@/lib/services/admin-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const parameterSchema = z.object({
@@ -48,6 +48,8 @@ const parameterSchema = z.object({
 const formSchema = z.object({
     parameters: z.array(parameterSchema),
     max_items_per_request: z.coerce.number().min(1).max(10000),
+    execution_method: z.string().default("elasticsearch"),
+    external_api_id: z.string().optional().nullable(),
 });
 
 type ConfigureParametersFormData = z.infer<typeof formSchema>;
@@ -66,6 +68,8 @@ export function ConfigureParametersDialog({
     requestType,
 }: ConfigureParametersDialogProps) {
     const [error, setError] = useState<string | null>(null);
+    const [externalApis, setExternalApis] = useState<ExternalAPI[]>([]);
+    const [loadingApis, setLoadingApis] = useState(false);
 
     const form = useForm<ConfigureParametersFormData>({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -73,8 +77,32 @@ export function ConfigureParametersDialog({
         defaultValues: {
             parameters: [],
             max_items_per_request: 100,
+            // @ts-ignore - execution_method exists on backend response but typescript might complain if RequestType interface is missing it
+            execution_method: requestType?.execution_method || "elasticsearch",
+            // @ts-ignore
+            external_api_id: requestType?.external_api_id || null,
         },
     });
+
+    const executionMethod = form.watch("execution_method");
+
+    useEffect(() => {
+        if (open) {
+            fetchExternalApis();
+        }
+    }, [open]);
+
+    const fetchExternalApis = async () => {
+        try {
+            setLoadingApis(true);
+            const apis = await externalApiService.getExternalAPIs();
+            setExternalApis(apis);
+        } catch (err) {
+            console.error("Error fetching external apis:", err);
+        } finally {
+            setLoadingApis(false);
+        }
+    };
 
     const { fields, append, remove } = useFieldArray({
         control: form.control,
@@ -86,11 +114,17 @@ export function ConfigureParametersDialog({
             form.reset({
                 parameters: requestType.parameters || [],
                 max_items_per_request: requestType.max_items_per_request || 100,
+                // @ts-ignore
+                execution_method: requestType.execution_method || "elasticsearch",
+                // @ts-ignore
+                external_api_id: requestType.external_api_id || null,
             });
         } else if (!open) {
             form.reset({
                 parameters: [],
                 max_items_per_request: 100,
+                execution_method: "elasticsearch",
+                external_api_id: null,
             });
             setError(null);
         }
@@ -144,6 +178,68 @@ export function ConfigureParametersDialog({
                                 </FormItem>
                             )}
                         />
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <FormField
+                                control={form.control}
+                                name="execution_method"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>روش اجرا</FormLabel>
+                                        <Select
+                                            onValueChange={field.onChange}
+                                            defaultValue={field.value}
+                                        >
+                                            <FormControl>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="انتخاب روش اجرا" />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                <SelectItem value="elasticsearch">پایگاه داده (Elasticsearch)</SelectItem>
+                                                <SelectItem value="external_api">API خارجی (External API)</SelectItem>
+                                                <SelectItem value="file_request">درخواست فایلی (File Request)</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            {executionMethod === "external_api" && (
+                                <FormField
+                                    control={form.control}
+                                    name="external_api_id"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>API خارجی</FormLabel>
+                                            <Select
+                                                onValueChange={field.onChange}
+                                                defaultValue={field.value || undefined}
+                                            >
+                                                <FormControl>
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder={loadingApis ? "در حال دریافت..." : "انتخاب API خارجی"} />
+                                                    </SelectTrigger>
+                                                </FormControl>
+                                                <SelectContent>
+                                                    {externalApis && externalApis.length > 0 ? (
+                                                        externalApis.map(api => (
+                                                            <SelectItem key={api.id} value={api.id}>{api.name}</SelectItem>
+                                                        ))
+                                                    ) : (
+                                                        <SelectItem value="none" disabled>
+                                                            {loadingApis ? "در حال دریافت..." : "هیچ API خارجی یافت نشد"}
+                                                        </SelectItem>
+                                                    )}
+                                                </SelectContent>
+                                            </Select>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            )}
+                        </div>
 
                         <div className="space-y-4">
                             <div className="flex items-center justify-between">

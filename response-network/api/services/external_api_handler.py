@@ -7,23 +7,42 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 
 from models.external_api import ExternalAPI
+from services.base_external_handler import BaseExternalHandler
 
 logger = logging.getLogger(__name__)
 
-class ExternalAPIHandler:
+class ExternalAPIHandler(BaseExternalHandler):
     def __init__(self, db: Session):
-        self.db = db
+        super().__init__(db)
 
-    def execute_api_call(self, api_name: str, payload_vars: Dict[str, Any]) -> Dict[str, Any]:
+    def get_name(self) -> str:
+        return "generic"
+        
+    def validate_params(self, params: Dict[str, Any]) -> bool:
+        return True
+        
+    def execute(self, request_data: Dict[str, Any], api_name: str = None, api_config: ExternalAPI = None) -> Dict[str, Any]:
+        """Implementation of Base interface."""
+        if not api_config:
+            if not api_name:
+                # Fallback if somehow api_name wasn't passed but is in request_data
+                api_name = request_data.get("api_name") or request_data.get("api_type")
+                
+            if not api_name:
+                raise ValueError("api_name or api_config is required for generic handler")
+                
+            api_config = self.db.query(ExternalAPI).filter(ExternalAPI.name == api_name).first()
+            if not api_config:
+                raise ValueError(f"External API '{api_name}' not found")
+            
+        return self.execute_api_call(api_config, request_data)
+
+    def execute_api_call(self, api_config: ExternalAPI, payload_vars: Dict[str, Any]) -> Dict[str, Any]:
         """
         Main entry point to call an external API dynamically based on its configuration.
         """
-        api_config = self.db.query(ExternalAPI).filter(ExternalAPI.name == api_name).first()
-        if not api_config:
-            raise ValueError(f"External API '{api_name}' not found")
-        
         if not api_config.is_active:
-            raise ValueError(f"External API '{api_name}' is inactive")
+            raise ValueError(f"External API '{api_config.name}' is inactive")
 
         # 1. Resolve Auth (Token or Static Header)
         auth_headers, auth_params = self._resolve_auth(api_config)

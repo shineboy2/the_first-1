@@ -83,6 +83,12 @@ async def delete_external_api(
     return None
 
 
+@router.get("/handlers/available", response_model=List[dict])
+async def list_available_handlers():
+    """List registered external API handlers."""
+    from services.handler_registry import HandlerRegistry
+    return HandlerRegistry.list_handlers()
+
 # ============ Profile Type Access Management ============
 
 class UpdateProfileExternalAPIAccess(BaseModel):

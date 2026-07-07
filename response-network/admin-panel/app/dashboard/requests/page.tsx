@@ -476,9 +476,34 @@ export default function RequestsPage() {
               <div>
                 <h4 className="text-sm font-medium mb-2">محتوای درخواست (Query Params)</h4>
                 <div className="rounded-md bg-gray-950 p-4 overflow-auto">
-                  <pre className="text-xs text-gray-50 font-mono">
-                    {JSON.stringify(selectedRequest?.content || selectedRequest?.query_params || {}, null, 2)}
-                  </pre>
+                  {(() => {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const params: any = selectedRequest?.content || selectedRequest?.query_params || {};
+                    const isFaceRec = params.api_type === 'face_recognition';
+                    if (isFaceRec && (params.file_data || params.base64Image)) {
+                       const imgData = params.file_data || params.base64Image;
+                       const imgSrc = imgData.startsWith('data:') ? imgData : `data:image/jpeg;base64,${imgData}`;
+                       const displayParams = { ...params };
+                       displayParams.file_data = "[BASE64_IMAGE_DATA]";
+                       displayParams.base64Image = "[BASE64_IMAGE_DATA]";
+                       return (
+                         <div className="flex flex-col gap-4">
+                           <div className="w-32 h-32 rounded overflow-hidden border border-gray-700">
+                             {/* eslint-disable-next-line @next/next/no-img-element */}
+                             <img src={imgSrc} alt="Sent" className="w-full h-full object-cover" />
+                           </div>
+                           <pre className="text-xs text-gray-50 font-mono">
+                             {JSON.stringify(displayParams, null, 2)}
+                           </pre>
+                         </div>
+                       );
+                    }
+                    return (
+                      <pre className="text-xs text-gray-50 font-mono">
+                        {JSON.stringify(params, null, 2)}
+                      </pre>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -491,10 +516,76 @@ export default function RequestsPage() {
                     <AlertDescription>{selectedRequest.error}</AlertDescription>
                   </Alert>
                 ) : (
-                  <div className="rounded-md bg-gray-950 p-4 overflow-auto max-h-[300px]">
-                    <pre className="text-xs text-green-400 font-mono">
-                      {JSON.stringify(selectedRequest?.result || {}, null, 2)}
-                    </pre>
+                  <div className="rounded-md bg-gray-950 p-4 overflow-auto max-h-[400px]">
+                    {(() => {
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      const result: any = selectedRequest?.result || {};
+                      const apiResponse = result.api_response || result.results?.[0]?.api_response;
+                      
+                      if (apiResponse && Array.isArray(apiResponse.similar_faces)) {
+                         // Render Face Recognition Custom Grid
+                         return (
+                           <div className="space-y-4">
+                             <div className="text-white text-xs flex justify-between">
+                               <span>تعداد تطابق: <strong className="text-blue-400">{apiResponse.total_matches}</strong></span>
+                               <span>امتیاز دیتکت: <strong className="text-green-400">{(apiResponse.detection_score * 100).toFixed(1)}%</strong></span>
+                             </div>
+                             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                               {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                               {apiResponse.similar_faces.map((face: any, i: number) => (
+                                 <div key={i} className="bg-gray-800 rounded p-2 border border-gray-700 flex flex-col gap-2">
+                                    <div className="flex justify-between items-center text-xs text-gray-300">
+                                      <span className="font-bold truncate" title={face.dossier_name}>{face.dossier_name || 'ناشناس'}</span>
+                                      <span className="text-green-400">{(face.confidence * 100).toFixed(1)}%</span>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <div className="flex flex-col items-center">
+                                        <span className="text-[10px] text-gray-500 mb-1">Thumbnail</span>
+                                        {face.thumbnail_b64 ? (
+                                          // eslint-disable-next-line @next/next/no-img-element
+                                          <img src={face.thumbnail_b64} alt="Thumb" className="w-full rounded object-cover aspect-square bg-gray-900" />
+                                        ) : <div className="w-full aspect-square bg-gray-900 rounded flex items-center justify-center text-xs text-gray-600">N/A</div>}
+                                      </div>
+                                      <div className="flex flex-col items-center">
+                                        <span className="text-[10px] text-gray-500 mb-1">Source</span>
+                                        {face.source_photo_b64 ? (
+                                          // eslint-disable-next-line @next/next/no-img-element
+                                          <img src={face.source_photo_b64} alt="Source" className="w-full rounded object-cover aspect-square bg-gray-900" />
+                                        ) : <div className="w-full aspect-square bg-gray-900 rounded flex items-center justify-center text-xs text-gray-600">N/A</div>}
+                                      </div>
+                                    </div>
+                                 </div>
+                               ))}
+                             </div>
+                             
+                             {/* Show full raw without base64 for debugging */}
+                             <details className="mt-4 border-t border-gray-700 pt-2">
+                               <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-300">نمایش پاسخ خام (بدون عکس)</summary>
+                               <pre className="text-[10px] text-gray-400 font-mono mt-2 overflow-auto">
+                                 {JSON.stringify({
+                                   ...result,
+                                   api_response: {
+                                     ...apiResponse,
+                                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                     similar_faces: apiResponse.similar_faces.map((f: any) => ({
+                                       ...f,
+                                       source_photo_b64: f.source_photo_b64 ? "[BASE64_IMAGE]" : "",
+                                       thumbnail_b64: f.thumbnail_b64 ? "[BASE64_IMAGE]" : ""
+                                     }))
+                                   }
+                                 }, null, 2)}
+                               </pre>
+                             </details>
+                           </div>
+                         );
+                      }
+                      
+                      return (
+                        <pre className="text-xs text-green-400 font-mono">
+                          {JSON.stringify(result, null, 2)}
+                        </pre>
+                      );
+                    })()}
                   </div>
                 )}
               </div>

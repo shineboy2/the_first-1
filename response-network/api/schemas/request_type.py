@@ -80,3 +80,12 @@ class RequestTypeRead(RequestTypeBase):
 
     class Config:
         from_attributes = True
+class RequestTypeUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+    version: Optional[str] = None
+    max_items_per_request: Optional[int] = None
+    execution_method: Optional[str] = None
+    external_api_id: Optional[UUID] = None
+    file_request_config_id: Optional[UUID] = None

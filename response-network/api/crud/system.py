@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import logging
 import redis.asyncio as redis
 
-from models.schemas import SystemStats, SystemHealth, LogEntry
+from models.pydantic_schemas import SystemStats, SystemHealth, LogEntry
 from models.request import Request
 from workers.elasticsearch_client import ElasticsearchClient
 from core.config import settings

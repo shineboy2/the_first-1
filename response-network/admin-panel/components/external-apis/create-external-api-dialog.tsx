@@ -40,6 +40,7 @@ export function CreateExternalAPIDialog({
         http_method: "POST",
         auth_type: "none",
         is_active: true,
+        handler_class: "generic",
         auth_config_raw: "",
         static_headers_raw: "",
         payload_template_raw: "",
@@ -53,6 +54,7 @@ export function CreateExternalAPIDialog({
             http_method: "POST",
             auth_type: "none",
             is_active: true,
+            handler_class: "generic",
             auth_config_raw: "",
             static_headers_raw: "",
             payload_template_raw: "",
@@ -82,6 +84,7 @@ export function CreateExternalAPIDialog({
                 http_method: formData.http_method,
                 auth_type: formData.auth_type,
                 is_active: formData.is_active,
+                handler_class: formData.handler_class,
                 auth_config: parseJSON(formData.auth_config_raw, "پیکربندی احراز هویت"),
                 static_headers: parseJSON(formData.static_headers_raw, "هدرهای ایستا"),
                 payload_template: parseJSON(formData.payload_template_raw, "قالب Payload"),
@@ -185,6 +188,33 @@ export function CreateExternalAPIDialog({
                     </div>
 
                     <div className="space-y-2 text-right">
+                        <Label htmlFor="handler_class">نوع هندلر پردازشی</Label>
+                        <Select
+                            value={formData.handler_class}
+                            onValueChange={(v) => setFormData({ ...formData, handler_class: v })}
+                        >
+                            <SelectTrigger dir="ltr">
+                                <SelectValue placeholder="نوع پردازش" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="generic">پردازش عمومی (Generic)</SelectItem>
+                                <SelectItem value="face_recognition">تشخیص چهره FF.Security</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {formData.handler_class === "face_recognition" && (
+                        <Alert className="bg-blue-50 border-blue-200">
+                            <AlertCircle className="h-4 w-4 text-blue-600" />
+                            <AlertDescription className="text-blue-800 text-xs text-right mt-1">
+                                در این حالت نیازی به تعریف <b>قالب Payload</b> یا <b>متد HTTP</b> ندارید (توسط کد نادیده گرفته می‌شوند). 
+                                در بخش <b>پیکربندی احراز هویت</b>، یک JSON حاوی <code>username</code>، <code>password</code>، <code>threshold</code> و <code>limit</code> وارد کنید. 
+                                همچنین <b>نوع احراز هویت</b> را روی Static Key قرار دهید.
+                            </AlertDescription>
+                        </Alert>
+                    )}
+
+                    <div className="space-y-2 text-right">
                         <Label htmlFor="description">توضیحات</Label>
                         <Input
                             id="description"
@@ -201,39 +231,45 @@ export function CreateExternalAPIDialog({
                                 id="auth_config_raw"
                                 value={formData.auth_config_raw}
                                 onChange={(e) => setFormData({ ...formData, auth_config_raw: e.target.value })}
-                                placeholder='{"auth_url": "...", "auth_payload": {...}}'
+                                placeholder={formData.handler_class === "face_recognition" 
+                                    ? '{\n  "username": "user",\n  "password": "pwd",\n  "threshold": 0.75,\n  "limit": 10\n}' 
+                                    : '{"auth_url": "...", "auth_payload": {...}}'}
                                 className="font-mono text-left"
                                 dir="ltr"
-                                rows={3}
+                                rows={4}
                             />
                         </div>
                     )}
 
-                    <div className="space-y-2 text-right">
-                        <Label htmlFor="static_headers_raw">هدرهای ایستا (JSON)</Label>
-                        <Textarea
-                            id="static_headers_raw"
-                            value={formData.static_headers_raw}
-                            onChange={(e) => setFormData({ ...formData, static_headers_raw: e.target.value })}
-                            placeholder='{"Content-Type": "application/json"}'
-                            className="font-mono text-left"
-                            dir="ltr"
-                            rows={2}
-                        />
-                    </div>
+                    {formData.handler_class !== "face_recognition" && (
+                        <div className="space-y-2 text-right">
+                            <Label htmlFor="static_headers_raw">هدرهای ایستا (JSON)</Label>
+                            <Textarea
+                                id="static_headers_raw"
+                                value={formData.static_headers_raw}
+                                onChange={(e) => setFormData({ ...formData, static_headers_raw: e.target.value })}
+                                placeholder='{"Content-Type": "application/json"}'
+                                className="font-mono text-left"
+                                dir="ltr"
+                                rows={2}
+                            />
+                        </div>
+                    )}
 
-                    <div className="space-y-2 text-right">
-                        <Label htmlFor="payload_template_raw">قالب Payload (JSON)</Label>
-                        <Textarea
-                            id="payload_template_raw"
-                            value={formData.payload_template_raw}
-                            onChange={(e) => setFormData({ ...formData, payload_template_raw: e.target.value })}
-                            placeholder='{"image": "{{file_data}}"}'
-                            className="font-mono text-left"
-                            dir="ltr"
-                            rows={4}
-                        />
-                    </div>
+                    {formData.handler_class !== "face_recognition" && (
+                        <div className="space-y-2 text-right">
+                            <Label htmlFor="payload_template_raw">قالب Payload (JSON)</Label>
+                            <Textarea
+                                id="payload_template_raw"
+                                value={formData.payload_template_raw}
+                                onChange={(e) => setFormData({ ...formData, payload_template_raw: e.target.value })}
+                                placeholder='{"image": "{{file_data}}"}'
+                                className="font-mono text-left"
+                                dir="ltr"
+                                rows={4}
+                            />
+                        </div>
+                    )}
 
                     <div className="flex items-center space-x-2 space-x-reverse">
                         <Switch

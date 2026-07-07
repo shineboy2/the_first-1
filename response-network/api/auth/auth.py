@@ -9,7 +9,7 @@ from core.config import settings
 from core.security import create_access_token
 from core.dependencies import get_db
 from crud import users as user_service
-from models.schemas import Token, UserCreate, User
+from models.pydantic_schemas import Token, UserCreate, User
 from models.user import User as UserModel
 from auth.dependencies import get_current_active_user
 

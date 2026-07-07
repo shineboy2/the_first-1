@@ -9,8 +9,10 @@ from pathlib import Path
 from celery import shared_task
 from sqlalchemy import create_engine, select, delete
 from sqlalchemy.orm import sessionmaker
+import json
 
 from models.sync_history import SyncHistory
+from models.query_result import QueryResult
 import sys
 import os
 
@@ -40,10 +42,11 @@ def cleanup_old_files():
             "exports_deleted": 0,
             "imports_deleted": 0,
             "total_size_freed": 0,
-            "sync_history_deleted": 0
+            "sync_history_deleted": 0,
+            "base64_results_cleaned": 0
         }
         
-        # پاکسازی تاریخچه همگام‌سازی از دیتابیس (قدیمی‌تر از 30 روز)
+        # پاکسازی تاریخچه همگام‌سازی از دیتابیس (قدیمی‌تر از 30 روز) و base64های دیتابیس
         try:
             db_user = os.getenv("RESPONSE_DB_USER", "postgres")
             db_pass = os.getenv("RESPONSE_DB_PASSWORD", "postgres")
@@ -63,6 +66,45 @@ def cleanup_old_files():
                 stats["sync_history_deleted"] = result.rowcount
                 session.commit()
                 logger.info(f"Cleaned {stats['sync_history_deleted']} old SyncHistory records (>{30} days)")
+                
+                # پاکسازی دیتای سنگین Base64 از نتایج کوئری قدیمی‌تر از 7 روز
+                cutoff_db_date_results = datetime.utcnow() - timedelta(days=7)
+                # We need to find QueryResults that have result_data -> api_response -> similar_faces
+                # Note: For SQLite/Postgres compatibility we fetch them and update
+                old_results = session.query(QueryResult).filter(
+                    QueryResult.executed_at < cutoff_db_date_results
+                ).all()
+                
+                cleaned_count = 0
+                for result_obj in old_results:
+                    if not result_obj.result_data:
+                        continue
+                    
+                    data = result_obj.result_data
+                    # Check if it has face recognition structure
+                    api_resp = data.get("api_response", {})
+                    if api_resp and "similar_faces" in api_resp:
+                        faces = api_resp.get("similar_faces", [])
+                        changed = False
+                        for face in faces:
+                            if face.get("source_photo_b64") and not face["source_photo_b64"].startswith("["):
+                                face["source_photo_b64"] = "[CLEANED_UP_AFTER_7_DAYS]"
+                                changed = True
+                            if face.get("thumbnail_b64") and not face["thumbnail_b64"].startswith("["):
+                                face["thumbnail_b64"] = "[CLEANED_UP_AFTER_7_DAYS]"
+                                changed = True
+                        
+                        if changed:
+                            # Modify dict inplace won't always trigger SQLAlchemy update for JSON, 
+                            # we need to reassign or use flag_modified
+                            result_obj.result_data = dict(data)
+                            cleaned_count += 1
+                
+                if cleaned_count > 0:
+                    stats["base64_results_cleaned"] = cleaned_count
+                    session.commit()
+                    logger.info(f"Cleaned base64 images from {cleaned_count} old QueryResults (>{7} days)")
+                    
         except Exception as e:
             logger.error(f"Failed to clean SyncHistory: {e}")
         

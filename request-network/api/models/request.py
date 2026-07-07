@@ -15,6 +15,7 @@ class Request(BaseModel, TimestampMixin):
     
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    sub_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("sub_users.id", ondelete="SET NULL"), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
     query_type: Mapped[str] = mapped_column(String(50), nullable=False)
     query_params: Mapped[dict] = mapped_column(JSONB, nullable=False)
@@ -30,6 +31,7 @@ class Request(BaseModel, TimestampMixin):
     
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="requests")
+    sub_user: Mapped["SubUser"] = relationship("SubUser")
     response: Mapped["Response"] = relationship("Response", back_populates="request", uselist=False, cascade="all, delete-orphan")
 
     def __repr__(self):
