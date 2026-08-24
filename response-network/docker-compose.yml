@@ -68,7 +68,7 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/1
-      - ELASTICSEARCH_URL=http://192.168.214.139:9200
+      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL:-http://192.168.214.139:9200}
       - SECRET_KEY=${SECRET_KEY}
       - FTP_HOST=${FTP_HOST}
       - FTP_PORT=${FTP_PORT:-21}
@@ -81,7 +81,7 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
-    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    command: bash -c "python -m alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000"
     ports:
       - "${API_PORT:-8000}:8000"
     volumes:
@@ -99,6 +99,7 @@ services:
 
   # =================== Admin Panel (Frontend) ===================
   admin-panel:
+    image: response-network-admin-panel:latest
     build:
       context: ./admin-panel
       dockerfile: Dockerfile
@@ -123,9 +124,6 @@ services:
   # =================== Celery Worker ===================
   celery-worker:
     image: response-network:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
     container_name: response-celery-worker
     environment:
       - PYTHONUNBUFFERED=1
@@ -137,7 +135,7 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/1
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL:-http://192.168.214.139:9200}
       - SECRET_KEY=${SECRET_KEY}
       - FTP_HOST=${FTP_HOST}
       - FTP_PORT=${FTP_PORT:-21}
@@ -166,9 +164,6 @@ services:
   # =================== Celery Beat (Scheduler) ===================
   celery-beat:
     image: response-network:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
     container_name: response-celery-beat
     environment:
       - PYTHONUNBUFFERED=1
@@ -180,7 +175,7 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/1
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL:-http://192.168.214.139:9200}
       - SECRET_KEY=${SECRET_KEY}
       - FTP_HOST=${FTP_HOST}
       - FTP_PORT=${FTP_PORT:-21}
@@ -209,9 +204,6 @@ services:
   # =================== Flower (Celery Monitor) ===================
   flower:
     image: response-network:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
     container_name: response-flower
     environment:
       - PYTHONUNBUFFERED=1

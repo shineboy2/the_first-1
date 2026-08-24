@@ -1,5 +1,5 @@
 from datetime import timedelta, datetime, timezone
-from typing import Annotated
+from typing import Annotated, Optional
 import sys
 from pathlib import Path
 import structlog
@@ -164,17 +164,20 @@ async def login_for_access_token(
 @router.post(
     "/token",
     response_model=Token,
-    summary="Machine/API Login (بدون کپچا)",
+    summary="Machine/API Login (No Captcha)",
     description=(
-        "لاگین برنامه‌نویسی برای استفاده ماشینی و یکپارچه‌سازی API. "
+        "لاگین مخصوص سرورها یا APIهای خارجی که امکان حل کپچا ندارند. "
         "کپچا ندارد ولی تمام چک‌های امنیتی دیگر (lockout، IP restriction، audit log) اعمال می‌شوند. "
-        "توکن برگشتی JWT است و با `Authorization: Bearer <token>` در سایر endpointها استفاده می‌شود."
+        "توکن برگشتی JWT است و با `Authorization: Bearer <token>` در سایر endpointها استفاده می‌شود. "
+        "Supports both JSON and Form Data."
     ),
 )
 async def machine_login(
     request: Request,
-    body: MachineLoginRequest,
     db: AsyncSession = Depends(get_db_session),
+    body: Optional[MachineLoginRequest] = None,
+    username_form: Optional[str] = Form(None, alias="username"),
+    password_form: Optional[str] = Form(None, alias="password"),
 ):
     """
     Authenticates a machine client and returns a JWT access token.
@@ -186,8 +189,19 @@ async def machine_login(
     else:
         client_ip = request.client.host if request.client else "unknown"
 
-    username = body.username
-    password = body.password
+    content_type = request.headers.get("content-type", "")
+    
+    if "application/x-www-form-urlencoded" in content_type:
+        username = username_form
+        password = password_form
+    else:
+        if not body:
+            raise HTTPException(status_code=400, detail="JSON body required")
+        username = body.username
+        password = body.password
+        
+    if not username or not password:
+        raise HTTPException(status_code=400, detail="username and password are required")
 
     query = select(User).where(
         (User.username == username) | (User.email == username)

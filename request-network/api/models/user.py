@@ -44,7 +44,8 @@ class User(BaseModel):
     subuser_rate_limit_per_minute: Mapped[int] = mapped_column(Integer, nullable=False, default=10, server_default='10')
     subuser_rate_limit_per_hour: Mapped[int] = mapped_column(Integer, nullable=False, default=100, server_default='100')
     subuser_rate_limit_per_day: Mapped[int] = mapped_column(Integer, nullable=False, default=500, server_default='500')
-
+    
+    max_subusers: Mapped[int] = mapped_column(Integer, nullable=False, default=10, server_default='10')
 
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)

@@ -18,7 +18,7 @@ depends_on = None
 
 def upgrade() -> None:
     # Add allowed_external_apis column to users table
-    op.add_column('users', sa.Column('allowed_external_apis', postgresql.JSONB(astext_type=sa.Text()), nullable=False, server_default='[]'))
+    op.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS allowed_external_apis JSONB DEFAULT '[]' NOT NULL")
 
 
 def downgrade() -> None:

@@ -31,6 +31,7 @@ from routers import admin_celery
 from routers import ftp_profile_router
 from routers import file_request_config_router
 from routers import audit_router
+from routers import object_storage_config_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -156,6 +157,9 @@ app.include_router(ftp_profile_router.router, prefix=settings.API_V1_STR, depend
 
 # File Request Configuration router
 app.include_router(file_request_config_router.router, prefix=settings.API_V1_STR, dependencies=[Depends(oauth2_scheme)])
+
+# Object Storage Configuration router
+app.include_router(object_storage_config_router.router, prefix=settings.API_V1_STR, dependencies=[Depends(oauth2_scheme)])
 
 
 # Auth endpoints are now properly routed through auth_router at /api/v1/auth/

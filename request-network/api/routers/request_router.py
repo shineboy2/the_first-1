@@ -85,7 +85,7 @@ async def submit_request(
     )
 
     # 3.7 Extract End-User Metadata
-    sub_user_id = http_request.headers.get("X-End-User-Id") or http_request.headers.get("X-User-Id")
+    sub_user_id = http_request.headers.get("X-Sub-User-Id")
     sub_user_db_id = None
     if sub_user_id:
         from models.subuser import SubUser
@@ -98,9 +98,13 @@ async def submit_request(
         if sub_user:
             sub_user_db_id = sub_user.id
 
-    # Dump all headers into meta
+    # Dump all headers into meta EXCEPT sensitive ones
+    safe_headers = dict(http_request.headers)
+    if "authorization" in safe_headers:
+        del safe_headers["authorization"]
+        
     meta_data = {
-        "headers": dict(http_request.headers),
+        "headers": safe_headers,
         "client_host": http_request.client.host if http_request.client else None,
     }
 
@@ -117,7 +121,6 @@ async def submit_request(
     )
     
     db.add(new_request)
-    await db.commit()
     await db.commit()
     
     # Reload request with eager loading for response to avoid MissingGreenlet error

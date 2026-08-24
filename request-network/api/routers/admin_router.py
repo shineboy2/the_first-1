@@ -142,6 +142,37 @@ async def get_all_requests(
     requests = result.scalars().all()
     return requests
 
+from schemas.request import RequestDetailed
+
+@router.get("/requests/{request_id}/details", response_model=RequestDetailed)
+async def get_request_details(
+    request_id: str,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    _: Annotated[None, Depends(require_admin)] = None
+):
+    """
+    Retrieve full details of a specific request, including meta and full response.
+    Requires admin privileges.
+    """
+    from sqlalchemy.orm import selectinload
+    import uuid
+    try:
+        req_uuid = uuid.UUID(request_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid request ID")
+        
+    query = (
+        select(Request)
+        .options(selectinload(Request.response))
+        .where(Request.id == req_uuid)
+    )
+    result = await db.execute(query)
+    request = result.scalars().first()
+    
+    if not request:
+        raise HTTPException(status_code=404, detail="Request not found")
+        
+    return request
 
 # ============================================================================
 # RATE LIMITING ENDPOINTS (Grace Period)

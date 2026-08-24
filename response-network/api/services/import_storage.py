@@ -7,6 +7,7 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from models.settings import Settings
+from models.ftp_profile import FTPProfile
 
 logger = logging.getLogger(__name__)
 
@@ -61,10 +62,28 @@ class ImportStorageService:
                 return None
         
         elif import_type == "ftp":
-            host = config.get("ftp_host", config.get("host"))
-            user = config.get("ftp_user", config.get("user"))
-            passwd = config.get("ftp_password", config.get("password"))
+            host = None
+            user = None
+            passwd = None
+            port = 21
+            use_tls = False
             remote_path = config.get("ftp_path", config.get("path", f"/{resource_type}"))
+            
+            ftp_profile_id = config.get("ftp_profile_id")
+            if ftp_profile_id:
+                result = db.execute(select(FTPProfile).where(FTPProfile.id == ftp_profile_id, FTPProfile.is_active == True))
+                ftp_profile = result.scalar_one_or_none()
+                if ftp_profile:
+                    host = ftp_profile.host
+                    user = ftp_profile.username
+                    passwd = ftp_profile.password
+                    port = ftp_profile.port or 21
+                    use_tls = ftp_profile.use_tls
+            
+            if not host:
+                host = config.get("ftp_host", config.get("host"))
+                user = config.get("ftp_user", config.get("user"))
+                passwd = config.get("ftp_password", config.get("password"))
             
             if not host:
                 logger.error(f"FTP host missing in import_config for {resource_type}")
@@ -72,7 +91,13 @@ class ImportStorageService:
             
             try:
                 bio = io.BytesIO()
-                with ftplib.FTP(host) as ftp:
+                if use_tls:
+                    ftp = ftplib.FTP_TLS()
+                else:
+                    ftp = ftplib.FTP()
+                    
+                with ftp:
+                    ftp.connect(host, port)
                     ftp.login(user=user, passwd=passwd)
                     try:
                         ftp.cwd(remote_path)

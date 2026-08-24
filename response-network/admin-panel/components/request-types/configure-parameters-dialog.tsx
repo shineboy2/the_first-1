@@ -45,11 +45,25 @@ const parameterSchema = z.object({
     placeholder_key: z.string().min(1, "کلید placeholder الزامی است"),
 });
 
+const fieldMappingEntrySchema = z.object({
+    key: z.string().min(1, "نام فیلد الستیک الزامی است"),
+    value: z.string().min(1, "نام نمایشی الزامی است"),
+});
+
+const indexMappingEntrySchema = z.object({
+    key: z.string().min(1, "نام ایندکس الزامی است"),
+    value: z.string().min(1, "نام نمایشی الزامی است"),
+});
+
 const formSchema = z.object({
     parameters: z.array(parameterSchema),
     max_items_per_request: z.coerce.number().min(1).max(10000),
     execution_method: z.string().default("elasticsearch"),
     external_api_id: z.string().optional().nullable(),
+    target_index: z.string().min(1, "نام ایندکس الزامی است").default("default"),
+    field_mapping_entries: z.array(fieldMappingEntrySchema),
+    index_mapping_entries: z.array(indexMappingEntrySchema),
+    object_storage_mapping_str: z.string().optional(),
 });
 
 type ConfigureParametersFormData = z.infer<typeof formSchema>;
@@ -77,10 +91,14 @@ export function ConfigureParametersDialog({
         defaultValues: {
             parameters: [],
             max_items_per_request: 100,
+            field_mapping_entries: [],
+            index_mapping_entries: [],
             // @ts-ignore - execution_method exists on backend response but typescript might complain if RequestType interface is missing it
             execution_method: requestType?.execution_method || "elasticsearch",
             // @ts-ignore
             external_api_id: requestType?.external_api_id || null,
+            target_index: requestType?.available_indices?.join(", ") || "default",
+            object_storage_mapping_str: "{}",
         },
     });
 
@@ -109,8 +127,24 @@ export function ConfigureParametersDialog({
         name: "parameters",
     });
 
+    const { fields: fieldMapFields, append: appendFieldMap, remove: removeFieldMap } = useFieldArray({
+        control: form.control,
+        name: "field_mapping_entries",
+    });
+
+    const { fields: indexMapFields, append: appendIndexMap, remove: removeIndexMap } = useFieldArray({
+        control: form.control,
+        name: "index_mapping_entries",
+    });
+
     useEffect(() => {
         if (open && requestType) {
+            // Convert mapping objects to entry arrays for the form
+            const fieldMappingObj = requestType.field_mapping || {};
+            const indexMappingObj = requestType.index_mapping || {};
+            const fieldEntries = Object.entries(fieldMappingObj).map(([key, value]) => ({ key, value: value as string }));
+            const indexEntries = Object.entries(indexMappingObj).map(([key, value]) => ({ key, value: value as string }));
+
             form.reset({
                 parameters: requestType.parameters || [],
                 max_items_per_request: requestType.max_items_per_request || 100,
@@ -118,6 +152,14 @@ export function ConfigureParametersDialog({
                 execution_method: requestType.execution_method || "elasticsearch",
                 // @ts-ignore
                 external_api_id: requestType.external_api_id || null,
+                target_index: requestType.available_indices?.join(", ") || "default",
+                field_mapping_entries: fieldEntries,
+                index_mapping_entries: indexEntries,
+                // @ts-ignore
+                object_storage_mapping_str: requestType.object_storage_mapping 
+                    // @ts-ignore
+                    ? JSON.stringify(requestType.object_storage_mapping, null, 2)
+                    : '{\n  "file_paths": ["doc.path"],\n  "bucket_field": "doc.bucket",\n  "base_prefix": ""\n}',
             });
         } else if (!open) {
             form.reset({
@@ -125,6 +167,10 @@ export function ConfigureParametersDialog({
                 max_items_per_request: 100,
                 execution_method: "elasticsearch",
                 external_api_id: null,
+                target_index: "default",
+                field_mapping_entries: [],
+                index_mapping_entries: [],
+                object_storage_mapping_str: '{\n  "file_paths": ["doc.path"],\n  "bucket_field": "doc.bucket",\n  "base_prefix": ""\n}',
             });
             setError(null);
         }
@@ -135,7 +181,42 @@ export function ConfigureParametersDialog({
 
         try {
             setError(null);
-            await requestService.configureRequestTypeParams(requestType.id, data);
+            
+            // Map target_index to available_indices array (support comma-separated multiple indices)
+            const indices = data.target_index.split(",").map(i => i.trim()).filter(i => i);
+            
+            // Convert entry arrays back to mapping objects
+            const fieldMapping: Record<string, string> = {};
+            for (const entry of data.field_mapping_entries || []) {
+                if (entry.key && entry.value) fieldMapping[entry.key] = entry.value;
+            }
+            const indexMapping: Record<string, string> = {};
+            for (const entry of data.index_mapping_entries || []) {
+                if (entry.key && entry.value) indexMapping[entry.key] = entry.value;
+            }
+            let objectStorageMappingObj = null;
+            if (data.execution_method === "object_storage" && data.object_storage_mapping_str) {
+                try {
+                    objectStorageMappingObj = JSON.parse(data.object_storage_mapping_str);
+                } catch (e) {
+                    setError("فرمت JSON برای تنظیمات آبجکت استورج نامعتبر است");
+                    return;
+                }
+            }
+
+            const submitData = {
+                ...data,
+                available_indices: indices.length > 0 ? indices : ["default"],
+                field_mapping: fieldMapping,
+                index_mapping: indexMapping,
+                object_storage_mapping: objectStorageMappingObj,
+                // Preserve current is_active and is_public values from the existing requestType
+                // These are managed separately (e.g. activate/deactivate buttons), not in this form
+                is_active: requestType.is_active ?? false,
+                is_public: requestType.is_public ?? false,
+            };
+            
+            await requestService.configureRequestTypeParams(requestType.id, submitData);
             onSuccess();
             onOpenChange(false);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -239,9 +320,49 @@ export function ConfigureParametersDialog({
                                     )}
                                 />
                             )}
+
+                            {executionMethod === "elasticsearch" && (
+                                <FormField
+                                    control={form.control}
+                                    name="target_index"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>نام ایندکس‌ها (با کاما جدا کنید)</FormLabel>
+                                            <FormControl>
+                                                <Input className="text-left" dir="ltr" placeholder="مثال: index-1, index-2" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            )}
                         </div>
 
-                        <div className="space-y-4">
+                        {executionMethod === "object_storage" && (
+                            <FormField
+                                control={form.control}
+                                name="object_storage_mapping_str"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>تنظیمات نگاشت Object Storage (JSON)</FormLabel>
+                                        <FormControl>
+                                            <Textarea
+                                                {...field}
+                                                rows={6}
+                                                className="font-mono text-sm"
+                                                dir="ltr"
+                                            />
+                                        </FormControl>
+                                        <FormDescription>
+                                            مشخص کنید کدام فیلدها در خروجی الستیک شامل آدرس فایل و نام باکت هستند.
+                                        </FormDescription>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        )}
+
+                        <div className="space-y-4 pt-4 border-t">
                             <div className="flex items-center justify-between">
                                 <h3 className="text-lg font-medium">پارامترها</h3>
                                 <Button
@@ -374,6 +495,126 @@ export function ConfigureParametersDialog({
                                 </div>
                             ))}
                         </div>
+
+                        {/* Index Mapping Section */}
+                        {executionMethod === "elasticsearch" && (
+                            <div className="space-y-4 border-t pt-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h3 className="text-lg font-medium">نگاشت ایندکس‌ها</h3>
+                                        <p className="text-sm text-muted-foreground">نام واقعی ایندکس الستیک‌سرچ را به نام نمایشی دلخواه تبدیل کنید.</p>
+                                    </div>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => appendIndexMap({ key: "", value: "" })}
+                                    >
+                                        <Plus className="h-4 w-4 mr-2" />
+                                        افزودن
+                                    </Button>
+                                </div>
+
+                                {indexMapFields.length === 0 && (
+                                    <p className="text-sm text-muted-foreground text-center py-2">
+                                        نگاشتی تعریف نشده. نام واقعی ایندکس‌ها نمایش داده خواهد شد.
+                                    </p>
+                                )}
+
+                                {indexMapFields.map((field, index) => (
+                                    <div key={field.id} className="flex items-center gap-2">
+                                        <FormField
+                                            control={form.control}
+                                            name={`index_mapping_entries.${index}.key`}
+                                            render={({ field }) => (
+                                                <FormItem className="flex-1">
+                                                    <FormControl>
+                                                        <Input {...field} className="text-left" dir="ltr" placeholder="نام واقعی ایندکس (مثلاً hotels_idx)" />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <span className="text-muted-foreground">←</span>
+                                        <FormField
+                                            control={form.control}
+                                            name={`index_mapping_entries.${index}.value`}
+                                            render={({ field }) => (
+                                                <FormItem className="flex-1">
+                                                    <FormControl>
+                                                        <Input {...field} placeholder="نام نمایشی (مثلاً اطلاعات هتل‌ها)" />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <Button type="button" variant="ghost" size="sm" onClick={() => removeIndexMap(index)}>
+                                            <Trash2 className="h-4 w-4 text-red-600" />
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Field Mapping Section */}
+                        {executionMethod === "elasticsearch" && (
+                            <div className="space-y-4 border-t pt-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h3 className="text-lg font-medium">نگاشت فیلدها</h3>
+                                        <p className="text-sm text-muted-foreground">نام فیلدهای خروجی الستیک‌سرچ را به نام فارسی دلخواه تبدیل کنید.</p>
+                                    </div>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => appendFieldMap({ key: "", value: "" })}
+                                    >
+                                        <Plus className="h-4 w-4 mr-2" />
+                                        افزودن
+                                    </Button>
+                                </div>
+
+                                {fieldMapFields.length === 0 && (
+                                    <p className="text-sm text-muted-foreground text-center py-2">
+                                        نگاشتی تعریف نشده. نام اصلی فیلدها نمایش داده خواهد شد.
+                                    </p>
+                                )}
+
+                                {fieldMapFields.map((field, index) => (
+                                    <div key={field.id} className="flex items-center gap-2">
+                                        <FormField
+                                            control={form.control}
+                                            name={`field_mapping_entries.${index}.key`}
+                                            render={({ field }) => (
+                                                <FormItem className="flex-1">
+                                                    <FormControl>
+                                                        <Input {...field} className="text-left" dir="ltr" placeholder="نام فیلد الستیک (مثلاً name)" />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <span className="text-muted-foreground">←</span>
+                                        <FormField
+                                            control={form.control}
+                                            name={`field_mapping_entries.${index}.value`}
+                                            render={({ field }) => (
+                                                <FormItem className="flex-1">
+                                                    <FormControl>
+                                                        <Input {...field} placeholder="نام نمایشی (مثلاً نام)" />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <Button type="button" variant="ghost" size="sm" onClick={() => removeFieldMap(index)}>
+                                            <Trash2 className="h-4 w-4 text-red-600" />
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
 
                         <DialogFooter>
                             <Button

@@ -37,9 +37,11 @@ class RequestPublic(BaseModel):
 
     id: uuid.UUID
     user_id: uuid.UUID
+    sub_user_id: uuid.UUID | None = None
     name: str | None = None
     query_type: str
     query_params: dict
+    meta: dict | None = None
     status: str
     priority: int
     created_at: datetime

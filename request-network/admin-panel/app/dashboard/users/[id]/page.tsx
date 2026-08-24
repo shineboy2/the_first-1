@@ -18,7 +18,8 @@ import {
     Lock,
     Globe,
     FileText,
-    BarChart3
+    BarChart3,
+    UserCog
 } from "lucide-react";
 import {
     BarChart,
@@ -52,8 +53,8 @@ import {
 } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
 
-import { userService, apiKeyService, rateLimitService, requestService, auditLogService } from "@/lib/services/admin-api";
-import type { User, APIKey, RateLimitStats, Request as ApiRequest } from "@/lib/services/admin-api";
+import { userService, apiKeyService, rateLimitService, requestService, auditLogService, subuserService } from "@/lib/services/admin-api";
+import type { User, APIKey, RateLimitStats, Request as ApiRequest, SubUser } from "@/lib/services/admin-api";
 
 export default function UserDetailsPage({ params }: { params: { id: string } }) {
     const router = useRouter();
@@ -64,6 +65,7 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
     const [rateLimit, setRateLimit] = useState<RateLimitStats | null>(null);
     const [requests, setRequests] = useState<ApiRequest[]>([]);
     const [auditLogs, setAuditLogs] = useState<any[]>([]);
+    const [subUsers, setSubUsers] = useState<SubUser[]>([]);
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -79,6 +81,16 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
     const [isSavingIps, setIsSavingIps] = useState(false);
 
     // Rate Limit Form State (kept for reset only)
+    
+    // SubUser Settings Edit State
+    const [isEditingSubuser, setIsEditingSubuser] = useState(false);
+    const [subuserSettings, setSubuserSettings] = useState({
+        max_subusers: 10,
+        subuser_rate_limit_per_minute: 0,
+        subuser_rate_limit_per_hour: 0,
+        subuser_rate_limit_per_day: 0
+    });
+    const [isSavingSubuser, setIsSavingSubuser] = useState(false);
 
     const fetchUserData = async () => {
         try {
@@ -86,17 +98,19 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
             setError(null);
             setGeneratedKey(null);
 
-            const [userData, keysData, userRequests, logsData] = await Promise.all([
+            const [userData, keysData, userRequests, logsData, subUsersData] = await Promise.all([
                 userService.getUserById(params.id),
                 apiKeyService.getUserApiKeys(params.id),
                 requestService.getAllRequests(0, 100, params.id).catch(() => []),
-                auditLogService.getLogs({ user_id: params.id, limit: 50 }).catch(() => ({ items: [] }))
+                auditLogService.getLogs({ user_id: params.id, limit: 50 }).catch(() => ({ items: [] })),
+                subuserService.getSubUsers(params.id).catch(() => [])
             ]);
 
             setUser(userData);
             setApiKeys(Array.isArray(keysData) ? keysData : []);
             setRequests(Array.isArray(userRequests) ? userRequests : []);
             setAuditLogs(logsData?.items || []);
+            setSubUsers(Array.isArray(subUsersData) ? subUsersData : []);
             setRateLimit(userData.rate_limit_stats ?? null);
 
             // Rate limit data loaded
@@ -639,6 +653,118 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
                         </div>
                     </CardContent>
                 </Card>
+                {/* Sub-users Table */}
+                <Card className="border-t-4 border-t-pink-500">
+                    <CardHeader>
+                        <CardTitle className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <UserCog className="h-5 w-5" />
+                                ساب‌یوزرهای اینترپرایز (Sub-users)
+                            </div>
+                            <div className="flex gap-2 items-center">
+                                <div className="text-sm font-normal bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200 px-3 py-1 rounded-full">
+                                    محدودیت تعریف ساب‌یوزر: {user.max_subusers ?? 10}
+                                </div>
+                                <Button variant="outline" size="sm" onClick={() => {
+                                    setSubuserSettings({
+                                        max_subusers: user.max_subusers ?? 10,
+                                        subuser_rate_limit_per_minute: (user as any).subuser_rate_limit_per_minute ?? 0,
+                                        subuser_rate_limit_per_hour: (user as any).subuser_rate_limit_per_hour ?? 0,
+                                        subuser_rate_limit_per_day: (user as any).subuser_rate_limit_per_day ?? 0
+                                    });
+                                    setIsEditingSubuser(!isEditingSubuser);
+                                }}>
+                                    {isEditingSubuser ? "انصراف" : "تنظیمات ساب‌یوزرها"}
+                                </Button>
+                            </div>
+                        </CardTitle>
+                        <CardDescription>
+                            مدیریت و مشاهده وضعیت کاربران زیرمجموعه (ساب‌یوزرها) که توسط این اکانت اینترپرایز به صورت خودکار (JIT) ایجاد شده‌اند.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {isEditingSubuser && (
+                            <div className="bg-pink-50/50 dark:bg-pink-950/20 p-4 rounded-lg mb-6 border border-pink-100 dark:border-pink-900/50 space-y-4">
+                                <h4 className="font-semibold text-sm">ویرایش محدودیت‌های ساب‌یوزرها</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                    <div>
+                                        <Label>حداکثر ساب‌یوزر</Label>
+                                        <Input type="number" min="0" value={subuserSettings.max_subusers} onChange={(e) => setSubuserSettings({ ...subuserSettings, max_subusers: parseInt(e.target.value) || 0 })} />
+                                    </div>
+                                    <div>
+                                        <Label>لیمیت در دقیقه</Label>
+                                        <Input type="number" min="0" value={subuserSettings.subuser_rate_limit_per_minute} onChange={(e) => setSubuserSettings({ ...subuserSettings, subuser_rate_limit_per_minute: parseInt(e.target.value) || 0 })} />
+                                    </div>
+                                    <div>
+                                        <Label>لیمیت در ساعت</Label>
+                                        <Input type="number" min="0" value={subuserSettings.subuser_rate_limit_per_hour} onChange={(e) => setSubuserSettings({ ...subuserSettings, subuser_rate_limit_per_hour: parseInt(e.target.value) || 0 })} />
+                                    </div>
+                                    <div>
+                                        <Label>لیمیت در روز</Label>
+                                        <Input type="number" min="0" value={subuserSettings.subuser_rate_limit_per_day} onChange={(e) => setSubuserSettings({ ...subuserSettings, subuser_rate_limit_per_day: parseInt(e.target.value) || 0 })} />
+                                    </div>
+                                </div>
+                                <div className="flex justify-end">
+                                    <Button size="sm" disabled={isSavingSubuser} onClick={async () => {
+                                        try {
+                                            setIsSavingSubuser(true);
+                                            const updated = await userService.updateUser(params.id, subuserSettings);
+                                            setUser(updated as any);
+                                            setIsEditingSubuser(false);
+                                        } catch(err: any) {
+                                            setError(err?.response?.data?.detail || "خطا در بروزرسانی");
+                                        } finally {
+                                            setIsSavingSubuser(false);
+                                        }
+                                    }}>
+                                        {isSavingSubuser ? <Loader2 className="h-4 w-4 animate-spin" /> : "ذخیره تنظیمات"}
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="rounded-md border max-h-[400px] overflow-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>آی‌دی خارجی (External ID)</TableHead>
+                                        <TableHead>نام نمایشی</TableHead>
+                                        <TableHead>وضعیت</TableHead>
+                                        <TableHead>تعداد درخواست</TableHead>
+                                        <TableHead>آخرین فعالیت</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {subUsers.length > 0 ? (
+                                        subUsers.map((su) => (
+                                            <TableRow key={su.id}>
+                                                <TableCell className="font-medium font-mono text-sm">{su.external_user_id}</TableCell>
+                                                <TableCell>{su.display_name || '—'}</TableCell>
+                                                <TableCell>
+                                                    <Badge variant={su.status === "active" ? "default" : "destructive"}>
+                                                        {su.status === "active" ? "فعال" : (su.status === "banned" ? "مسدود" : su.status)}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="font-mono">{su.request_count}</TableCell>
+                                                <TableCell dir="ltr" className="text-sm text-gray-500">
+                                                    {su.last_request_at ? new Date(su.last_request_at).toLocaleString("fa-IR") : '—'}
+                                                    {su.last_request_ip && <div className="text-xs mt-1">IP: {su.last_request_ip}</div>}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    ) : (
+                                        <TableRow>
+                                            <TableCell colSpan={5} className="text-center py-6 text-gray-500">
+                                                هیچ ساب‌یوزری برای این کاربر یافت نشد.
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </CardContent>
+                </Card>
+
                 {/* Audit Logs Section */}
                 <Card className="md:col-span-2">
                     <CardHeader>

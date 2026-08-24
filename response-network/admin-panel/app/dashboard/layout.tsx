@@ -88,6 +88,11 @@ const navigation = [
     href: "/dashboard/workers",
     icon: Network,
   },
+  {
+    name: "تنظیمات Object Storage",
+    href: "/dashboard/object-storage-configs",
+    icon: Server,
+  },
 ];
 
 const settingsNavigation = [

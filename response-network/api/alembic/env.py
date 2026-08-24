@@ -28,6 +28,7 @@ from models.request import Request
 from models.ftp_profile import FTPProfile
 from models.file_request_config import FileRequestConfig
 from models.file_request import FileRequest
+from models.object_storage_config import ObjectStorageConfig
 
 # Load our config
 config = context.config
@@ -41,14 +42,21 @@ target_metadata = Base.metadata
 
 
 def get_database_url():
-    """Build database URL from environment variables."""
     user = os.getenv("RESPONSE_DB_USER", os.getenv("DB_USER", "postgres"))
     password = os.getenv("RESPONSE_DB_PASSWORD", os.getenv("DB_PASSWORD", "postgres"))
     host = os.getenv("RESPONSE_DB_HOST", os.getenv("DB_HOST", "localhost"))
     port = os.getenv("RESPONSE_DB_PORT", os.getenv("DB_PORT", "5432"))
     db_name = os.getenv("RESPONSE_DB_NAME", os.getenv("DB_NAME", "response_network"))
-    # Use psycopg (sync) for Alembic migrations
-    return f"postgresql+psycopg://{user}:{password}@{host}:{port}/{db_name}"
+    
+    import socket
+    try:
+        # Force IPv4 resolution to avoid psycopg IPv6 timeouts in Docker Alpine
+        resolved_host = socket.gethostbyname(host)
+    except Exception:
+        resolved_host = host
+
+    # Use psycopg2 (sync) for Alembic migrations
+    return f"postgresql+psycopg2://{user}:{password}@{resolved_host}:{port}/{db_name}"
 
 
 

@@ -61,3 +61,6 @@ simulation/data/
 simulation/ftp-req-data/
 simulation/ftp-resp-data/
 
+
+# Export files
+exports/

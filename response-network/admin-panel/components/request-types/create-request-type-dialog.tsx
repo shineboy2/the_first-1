@@ -42,6 +42,7 @@ const createRequestTypeSchema = z.object({
     is_active: z.boolean().default(false),
     execution_method: z.string().default("elasticsearch"),
     external_api_id: z.string().optional().nullable(),
+    object_storage_config_id: z.string().optional().nullable(),
 });
 
 type CreateRequestTypeFormData = z.infer<typeof createRequestTypeSchema>;
@@ -60,6 +61,10 @@ export function CreateRequestTypeDialog({
     const [isLoading, setIsLoading] = useState(false);
     const [externalApis, setExternalApis] = useState<ExternalAPI[]>([]);
     const [loadingApis, setLoadingApis] = useState(false);
+    
+    // Add state for object storage configs
+    const [objectStorageConfigs, setObjectStorageConfigs] = useState<any[]>([]);
+    const [loadingStorage, setLoadingStorage] = useState(false);
 
     const form = useForm<CreateRequestTypeFormData>({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -70,6 +75,7 @@ export function CreateRequestTypeDialog({
             is_active: false,
             execution_method: "elasticsearch",
             external_api_id: null,
+            object_storage_config_id: null,
         },
     });
 
@@ -78,6 +84,7 @@ export function CreateRequestTypeDialog({
     useEffect(() => {
         if (open) {
             fetchExternalApis();
+            fetchObjectStorageConfigs();
         }
     }, [open]);
 
@@ -90,6 +97,19 @@ export function CreateRequestTypeDialog({
             console.error("Error fetching external apis:", error);
         } finally {
             setLoadingApis(false);
+        }
+    };
+
+    const fetchObjectStorageConfigs = async () => {
+        try {
+            setLoadingStorage(true);
+            const { adminApi } = await import('@/lib/services/admin-api');
+            const configs = await adminApi.objectStorageConfigService.getConfigs();
+            setObjectStorageConfigs(Array.isArray(configs) ? configs : []);
+        } catch (error) {
+            console.error("Error fetching object storage configs:", error);
+        } finally {
+            setLoadingStorage(false);
         }
     };
 
@@ -167,9 +187,10 @@ export function CreateRequestTypeDialog({
                                             </SelectTrigger>
                                         </FormControl>
                                         <SelectContent>
-                                            <SelectItem value="elasticsearch">پایگاه داده (Elasticsearch)</SelectItem>
-                                            <SelectItem value="external_api">API خارجی (External API)</SelectItem>
-                                            <SelectItem value="file_request">درخواست فایلی (File Request)</SelectItem>
+                                            <SelectItem value="elasticsearch">Elasticsearch</SelectItem>
+                                            <SelectItem value="external_api">API خارجی</SelectItem>
+                                            <SelectItem value="file_request">درخواست فایلی (FTP)</SelectItem>
+                                            <SelectItem value="object_storage">آبجکت استورج (Ceph/MinIO)</SelectItem>
                                         </SelectContent>
                                     </Select>
                                     <FormMessage />
@@ -211,7 +232,45 @@ export function CreateRequestTypeDialog({
                             />
                         )}
 
-                        <DialogFooter>
+                        {executionMethod === "object_storage" && (
+                            <FormField
+                                control={form.control}
+                                name="object_storage_config_id"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>انتخاب تنظیمات Object Storage</FormLabel>
+                                        <Select
+                                            onValueChange={field.onChange}
+                                            value={field.value || ""}
+                                        >
+                                            <FormControl>
+                                                <SelectTrigger disabled={loadingStorage}>
+                                                    <SelectValue placeholder={loadingStorage ? "در حال بارگذاری..." : "انتخاب تنظیمات..."} />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                {objectStorageConfigs.map((config) => (
+                                                    <SelectItem key={config.id} value={config.id}>
+                                                        {config.display_name || config.name}
+                                                    </SelectItem>
+                                                ))}
+                                                {objectStorageConfigs.length === 0 && !loadingStorage && (
+                                                    <SelectItem value="none" disabled>
+                                                        هیچ تنظیمی یافت نشد
+                                                    </SelectItem>
+                                                )}
+                                            </SelectContent>
+                                        </Select>
+                                        <FormDescription>
+                                            سرور Ceph یا MinIO که فایل‌ها از آن دانلود می‌شوند را انتخاب کنید
+                                        </FormDescription>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        )}
+
+                        <DialogFooter className="gap-2">
                             <Button
                                 type="button"
                                 variant="outline"

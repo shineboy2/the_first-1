@@ -27,12 +27,13 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
 
-import { requestService, type RequestData } from "@/lib/services/admin-api";
+import { requestService } from "@/lib/services/admin-api";
+import type { Request } from "@/lib/services/admin-api";
 
 export default function RequestDetailsPage({ params }: { params: { id: string } }) {
     const router = useRouter();
     const { user: currentUser } = useAuthStore();
-    const [request, setRequest] = useState<RequestData | null>(null);
+    const [request, setRequest] = useState<Request | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -183,7 +184,7 @@ export default function RequestDetailsPage({ params }: { params: { id: string } 
                             <div className="flex items-center gap-3">
                                 {getStatusIcon(request.status)}
                                 <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                                    درخواست: {request.name}
+                                    درخواست: {request.name || request.request_type || request.query_type || 'نامشخص'}
                                 </h1>
                                 {getStatusBadge(request.status)}
                             </div>
@@ -215,6 +216,12 @@ export default function RequestDetailsPage({ params }: { params: { id: string } 
                                     {request.user_id}
                                 </div>
                             </div>
+                            {request.sub_user_id && (
+                                <div>
+                                    <Label className="text-gray-500">شناسه ساب‌یوزر (Sub-user)</Label>
+                                    <div className="mt-1 font-mono">{request.sub_user_id}</div>
+                                </div>
+                            )}
                             <div>
                                 <Label className="text-gray-500">تاریخ ثبت درخواست</Label>
                                 <div className="mt-1" dir="ltr">{new Date(request.created_at).toLocaleString("fa-IR")}</div>
@@ -222,9 +229,21 @@ export default function RequestDetailsPage({ params }: { params: { id: string } 
                             <div>
                                 <Label className="text-gray-500">اولویت پردازش شبکه</Label>
                                 <div className="mt-1">
-                                    <Badge variant="outline">Priority {request.priority}</Badge>
+                                    <Badge variant="outline">Priority {request.priority || 0}</Badge>
                                 </div>
                             </div>
+                            {request.meta && Object.keys(request.meta).length > 0 && (
+                                <div className="pt-2 border-t">
+                                    <Label className="text-gray-500 mb-2 block">متا دیتا و هدرها</Label>
+                                    <div className="bg-gray-50 dark:bg-gray-800 p-2 rounded text-xs font-mono break-all" dir="ltr">
+                                        <ul className="space-y-1">
+                                            {Object.entries(request.meta).map(([key, value]) => (
+                                                <li key={key}><span className="text-gray-500">{key}:</span> {String(value)}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
 
@@ -291,6 +310,69 @@ export default function RequestDetailsPage({ params }: { params: { id: string } 
                                             ? (() => { try { return JSON.parse(request.response.result_data); } catch(e) { return null; } })()
                                             : request.response.result_data
                                     )}
+
+                                    {/* Grouped Results by Index (new format) */}
+                                    {(() => {
+                                        const resultData = typeof request.response.result_data === 'string'
+                                            ? (() => { try { return JSON.parse(request.response.result_data); } catch(e) { return null; } })()
+                                            : request.response.result_data;
+
+                                        if (resultData && resultData.results_by_index && typeof resultData.results_by_index === 'object') {
+                                            const indexEntries = Object.entries(resultData.results_by_index as Record<string, any[]>);
+                                            return (
+                                                <div className="space-y-4">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <Database className="h-4 w-4 text-indigo-500" />
+                                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                            تعداد کل نتایج: {resultData.count || 0} — از {indexEntries.length} منبع
+                                                        </span>
+                                                    </div>
+                                                    {indexEntries.map(([indexName, records]) => (
+                                                        <Card key={indexName} className="border-r-4 border-r-indigo-400">
+                                                            <CardHeader className="pb-2">
+                                                                <CardTitle className="text-base flex items-center gap-2">
+                                                                    <Server className="h-4 w-4 text-indigo-500" />
+                                                                    {indexName}
+                                                                    <Badge variant="secondary" className="text-xs">
+                                                                        {(records as any[]).length} رکورد
+                                                                    </Badge>
+                                                                </CardTitle>
+                                                            </CardHeader>
+                                                            <CardContent>
+                                                                <div className="overflow-x-auto">
+                                                                    {(records as any[]).length > 0 && (
+                                                                        <table className="w-full text-sm border-collapse">
+                                                                            <thead>
+                                                                                <tr className="bg-gray-100 dark:bg-gray-800">
+                                                                                    {Object.keys((records as any[])[0]).map((key) => (
+                                                                                        <th key={key} className="px-3 py-2 text-right font-medium text-gray-600 dark:text-gray-400 border-b">
+                                                                                            {key}
+                                                                                        </th>
+                                                                                    ))}
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody>
+                                                                                {(records as any[]).map((row: any, rowIdx: number) => (
+                                                                                    <tr key={rowIdx} className="border-b hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                                                                        {Object.values(row).map((val: any, colIdx: number) => (
+                                                                                            <td key={colIdx} className="px-3 py-2 text-gray-800 dark:text-gray-200">
+                                                                                                {typeof val === 'object' ? JSON.stringify(val) : String(val ?? '')}
+                                                                                            </td>
+                                                                                        ))}
+                                                                                    </tr>
+                                                                                ))}
+                                                                            </tbody>
+                                                                        </table>
+                                                                    )}
+                                                                </div>
+                                                            </CardContent>
+                                                        </Card>
+                                                    ))}
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    })()}
 
                                     <div className="mt-4">
                                         <Label className="text-xs text-gray-500 mb-2 block">داده‌های خام (JSON)</Label>

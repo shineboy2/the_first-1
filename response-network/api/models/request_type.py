@@ -21,6 +21,12 @@ class RequestType(BaseModel, UUIDMixin, TimestampMixin):
     available_indices: Mapped[List[str]] = mapped_column(ARRAY(String), nullable=False, default=lambda: ["default"])
     elasticsearch_query_template: Mapped[dict] = mapped_column(JSON, nullable=True, default=lambda: {})
 
+    # Output transformation mappings
+    # field_mapping: Rename ES _source keys in the output, e.g. {"name": "نام", "city": "شهر"}
+    field_mapping: Mapped[dict] = mapped_column(JSON, nullable=True, default=lambda: {})
+    # index_mapping: Alias real index names, e.g. {"hotels_index": "اطلاعات هتل‌ها"}
+    index_mapping: Mapped[dict] = mapped_column(JSON, nullable=True, default=lambda: {})
+
     # Execution method: "elasticsearch" (default), "external_api", "file_request"
     execution_method: Mapped[str] = mapped_column(
         String(50), nullable=False, default="elasticsearch"
@@ -33,6 +39,15 @@ class RequestType(BaseModel, UUIDMixin, TimestampMixin):
     external_api_id: Mapped[Optional[UUID]] = mapped_column(
         PGUUID, ForeignKey("external_apis.id"), nullable=True
     )
+    # FK to object_storage_configs.id — only when execution_method == "object_storage"
+    object_storage_config_id: Mapped[Optional[UUID]] = mapped_column(
+        PGUUID, ForeignKey("object_storage_configs.id"), nullable=True
+    )
+    # JSON config for mapping ES result fields to object storage paths
+    # Example: {"file_paths": ["photo_path"], "base_prefix": "images/", ...}
+    object_storage_mapping: Mapped[Optional[dict]] = mapped_column(
+        JSON, nullable=True, default=None
+    )
 
     created_by_id: Mapped[UUID] = mapped_column(PGUUID, ForeignKey("users.id"), nullable=False, default=None)
     created_by: Mapped["User"] = relationship("User", back_populates="created_request_types")
@@ -43,3 +58,4 @@ class RequestType(BaseModel, UUIDMixin, TimestampMixin):
     profile_access: Mapped[List["ProfileTypeRequestAccess"]] = relationship("ProfileTypeRequestAccess", back_populates="request_type")
     file_request_config = relationship("FileRequestConfig", foreign_keys=[file_request_config_id])
     external_api_rel = relationship("ExternalAPI", foreign_keys=[external_api_id])
+    object_storage_config_rel = relationship("ObjectStorageConfig", foreign_keys=[object_storage_config_id])

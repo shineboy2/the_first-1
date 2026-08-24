@@ -23,6 +23,7 @@ def get_swagger_ui_html(
                 SwaggerUIBundle.presets.apis,
                 SwaggerUIBundle.SwaggerUIStandalonePreset
             ],
+            persistAuthorization: true,
         }})
         </script>
     </body>

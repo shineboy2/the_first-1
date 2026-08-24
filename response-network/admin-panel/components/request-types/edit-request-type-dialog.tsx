@@ -46,6 +46,7 @@ const formSchema = z.object({
     max_items_per_request: z.coerce.number().min(1, "حداقل 1").max(10000, "حداکثر 10000"),
     execution_method: z.string().default("elasticsearch"),
     external_api_id: z.string().optional().nullable(),
+    object_storage_config_id: z.string().optional().nullable(),
 });
 
 type EditRequestTypeFormData = z.infer<typeof formSchema>;
@@ -66,6 +67,10 @@ export function EditRequestTypeDialog({
     const [error, setError] = useState<string | null>(null);
     const [externalApis, setExternalApis] = useState<any[]>([]);
     const [loadingApis, setLoadingApis] = useState(false);
+    
+    // Add state for object storage configs
+    const [objectStorageConfigs, setObjectStorageConfigs] = useState<any[]>([]);
+    const [loadingStorage, setLoadingStorage] = useState(false);
 
     useEffect(() => {
         const fetchExternalApis = async () => {
@@ -80,7 +85,20 @@ export function EditRequestTypeDialog({
                 setLoadingApis(false);
             }
         };
+        const fetchObjectStorageConfigs = async () => {
+            try {
+                setLoadingStorage(true);
+                const { adminApi } = await import('@/lib/services/admin-api');
+                const configs = await adminApi.objectStorageConfigService.getConfigs();
+                setObjectStorageConfigs(Array.isArray(configs) ? configs : []);
+            } catch (err) {
+                console.error("Error fetching object storage configs:", err);
+            } finally {
+                setLoadingStorage(false);
+            }
+        };
         fetchExternalApis();
+        fetchObjectStorageConfigs();
     }, []);
 
     const form = useForm<EditRequestTypeFormData>({
@@ -96,6 +114,8 @@ export function EditRequestTypeDialog({
             execution_method: requestType?.execution_method || "elasticsearch",
             // @ts-ignore
             external_api_id: requestType?.external_api_id || null,
+            // @ts-ignore
+            object_storage_config_id: requestType?.object_storage_config_id || null,
         },
     });
 
@@ -113,6 +133,8 @@ export function EditRequestTypeDialog({
                 execution_method: requestType.execution_method || "elasticsearch",
                 // @ts-ignore
                 external_api_id: requestType.external_api_id || null,
+                // @ts-ignore
+                object_storage_config_id: requestType.object_storage_config_id || null,
             });
         } else if (!open) {
             form.reset({
@@ -123,6 +145,7 @@ export function EditRequestTypeDialog({
                 max_items_per_request: 100,
                 execution_method: "elasticsearch",
                 external_api_id: null,
+                object_storage_config_id: null,
             });
             setError(null);
         }
@@ -207,9 +230,10 @@ export function EditRequestTypeDialog({
                                             </SelectTrigger>
                                         </FormControl>
                                         <SelectContent>
-                                            <SelectItem value="elasticsearch">پایگاه داده (Elasticsearch)</SelectItem>
-                                            <SelectItem value="external_api">API خارجی (External API)</SelectItem>
-                                            <SelectItem value="file_request">درخواست فایلی (File Request)</SelectItem>
+                                            <SelectItem value="elasticsearch">Elasticsearch</SelectItem>
+                                            <SelectItem value="external_api">API خارجی</SelectItem>
+                                            <SelectItem value="file_request">درخواست فایلی (FTP)</SelectItem>
+                                            <SelectItem value="object_storage">آبجکت استورج (Ceph/MinIO)</SelectItem>
                                         </SelectContent>
                                     </Select>
                                     <FormMessage />
@@ -301,6 +325,44 @@ export function EditRequestTypeDialog({
                                 </FormItem>
                             )}
                         />
+
+                        {executionMethod === "object_storage" && (
+                            <FormField
+                                control={form.control}
+                                name="object_storage_config_id"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>انتخاب تنظیمات Object Storage</FormLabel>
+                                        <Select
+                                            onValueChange={field.onChange}
+                                            value={field.value || ""}
+                                        >
+                                            <FormControl>
+                                                <SelectTrigger disabled={loadingStorage}>
+                                                    <SelectValue placeholder={loadingStorage ? "در حال بارگذاری..." : "انتخاب تنظیمات..."} />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                {objectStorageConfigs.map((config) => (
+                                                    <SelectItem key={config.id} value={config.id}>
+                                                        {config.display_name || config.name}
+                                                    </SelectItem>
+                                                ))}
+                                                {objectStorageConfigs.length === 0 && !loadingStorage && (
+                                                    <SelectItem value="none" disabled>
+                                                        هیچ تنظیمی یافت نشد
+                                                    </SelectItem>
+                                                )}
+                                            </SelectContent>
+                                        </Select>
+                                        <FormDescription>
+                                            سرور Ceph یا MinIO که فایل‌ها از آن دانلود می‌شوند را انتخاب کنید
+                                        </FormDescription>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        )}
 
                         <DialogFooter>
                             <Button

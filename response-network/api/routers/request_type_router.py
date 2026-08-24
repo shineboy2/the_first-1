@@ -77,7 +77,8 @@ async def create_request_type(
         elasticsearch_query_template={},
         execution_method=req_type.execution_method,
         external_api_id=req_type.external_api_id,
-        file_request_config_id=req_type.file_request_config_id
+        file_request_config_id=req_type.file_request_config_id,
+        object_storage_config_id=getattr(req_type, 'object_storage_config_id', None),
     )
     
     db.add(new_type)
@@ -168,10 +169,14 @@ async def configure_request_type_params(
     req_type.is_public = config.is_public
     req_type.max_items_per_request = config.max_items_per_request
     req_type.available_indices = config.available_indices
+    req_type.field_mapping = config.field_mapping or {}
+    req_type.index_mapping = config.index_mapping or {}
     if config.execution_method is not None:
         req_type.execution_method = config.execution_method
         req_type.external_api_id = config.external_api_id
         req_type.file_request_config_id = config.file_request_config_id
+        req_type.object_storage_config_id = getattr(config, 'object_storage_config_id', None)
+        req_type.object_storage_mapping = getattr(config, 'object_storage_mapping', None)
     
     # Validate that active request types must have at least one parameter
     if config.is_active:
@@ -197,6 +202,17 @@ async def configure_request_type_params(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot activate a File request type without a file configuration."
             )
+        if req_type.execution_method == "object_storage":
+            if not req_type.object_storage_config_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Cannot activate an Object Storage request type without a storage configuration."
+                )
+            if not req_type.elasticsearch_query_template:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Cannot activate an Object Storage request type without an Elasticsearch query template."
+                )
 
     # Update parameters
     # First remove existing parameters

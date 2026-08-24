@@ -29,10 +29,11 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2 } from "lucide-react";
 
-import { requestService, type RequestData } from "@/lib/services/admin-api";
+import { requestService } from "@/lib/services/admin-api";
+import type { Request } from "@/lib/services/admin-api";
 
 interface RequestsState {
-    requests: RequestData[];
+    requests: Request[];
     loading: boolean;
     error: string | null;
     searchTerm: string;
@@ -77,7 +78,7 @@ export default function RequestsPage() {
 
     const handleRefresh = () => fetchRequests();
 
-    const handleDetailsClick = (req: RequestData) => {
+    const handleDetailsClick = (req: Request) => {
         // We will build this page next
         router.push(`/dashboard/requests/${req.id}`);
     };
@@ -268,7 +269,10 @@ export default function RequestsPage() {
                                             filteredRequests.map((req) => (
                                                 <TableRow key={req.id}>
                                                     <TableCell className="font-medium">
-                                                        {req.name}
+                                                        <div className="flex items-center">
+                                                            {req.name || req.request_type || req.query_type || 'نامشخص'}
+                                                            {req.query_type === "web_search" && <Badge variant="outline" className="ml-2 text-[10px]">جستجو</Badge>}
+                                                        </div>
                                                         <div className="text-xs text-muted-foreground mt-1 font-mono">{req.id.split("-")[0]}</div>
                                                     </TableCell>
                                                     <TableCell>

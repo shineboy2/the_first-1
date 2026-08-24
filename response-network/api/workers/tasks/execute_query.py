@@ -167,6 +167,187 @@ def execute_pending_queries(self):
                     db.commit()
                     processed_count += 1
                     continue
+
+                # Check if it is an object_storage request (ES query + download from Ceph/MinIO)
+                if file_req_type and file_req_type.execution_method == "object_storage":
+                    from models.object_storage_config import ObjectStorageConfig
+                    from services.object_storage_handler import ObjectStorageHandler
+
+                    if not file_req_type.object_storage_config_id:
+                        raise ValueError(
+                            f"RequestType '{req.query_type}' is configured as object_storage "
+                            f"but has no object_storage_config_id"
+                        )
+
+                    if not file_req_type.elasticsearch_query_template:
+                        raise ValueError(
+                            f"RequestType '{req.query_type}' is configured as object_storage "
+                            f"but has no elasticsearch_query_template"
+                        )
+
+                    # Step 1: Execute ES query to get file paths
+                    # (Reuse existing ES query logic)
+                    def render_template(template, params):
+                        if isinstance(template, dict):
+                            return {k: render_template(v, params) for k, v in template.items()}
+                        elif isinstance(template, list):
+                            return [render_template(v, params) for v in template]
+                        elif isinstance(template, str):
+                            for key, val in params.items():
+                                if f"{{{{{key}}}}}" in template:
+                                    template = template.replace(f"{{{{{key}}}}}", str(val))
+                            return template
+                        else:
+                            return template
+
+                    query_body = render_template(
+                        file_req_type.elasticsearch_query_template,
+                        req.query_params or {}
+                    )
+
+                    index_name = ",".join(file_req_type.available_indices) if file_req_type.available_indices else "default"
+
+                    # Get ES config
+                    es_config = db.query(ElasticsearchConfig).filter(
+                        ElasticsearchConfig.is_active == True
+                    ).first()
+
+                    if es_config:
+                        base_url = es_config.url.rstrip('/')
+                        es_auth = None
+                        if es_config.username and es_config.password:
+                            credentials = f"{es_config.username}:{es_config.password}"
+                            encoded_credentials = base64.b64encode(credentials.encode()).decode()
+                            es_auth = f"Basic {encoded_credentials}"
+                    else:
+                        base_url = str(settings.ELASTICSEARCH_URL).rstrip('/')
+                        es_auth = None
+
+                    es_url = f"{base_url}/{index_name}/_search"
+
+                    import urllib.request
+                    import urllib.error
+                    import ssl
+
+                    req_data_bytes = json.dumps(query_body).encode('utf-8')
+                    logger.info(f"[OBJECT_STORAGE] Executing ES query against {es_url}")
+
+                    req_obj_es = urllib.request.Request(
+                        es_url, data=req_data_bytes,
+                        headers={'Content-Type': 'application/json'}
+                    )
+                    if es_auth:
+                        req_obj_es.add_header('Authorization', es_auth)
+
+                    ssl_context = None
+                    if es_url.startswith('https://'):
+                        verify_ssl = es_config.verify_ssl if es_config else False
+                        if not verify_ssl:
+                            ssl_context = ssl._create_unverified_context()
+                        else:
+                            ssl_context = ssl.create_default_context()
+
+                    try:
+                        with urllib.request.urlopen(req_obj_es, timeout=10.0, context=ssl_context) as f:
+                            response_body = f.read().decode('utf-8')
+                            es_result = json.loads(response_body)
+                    except urllib.error.HTTPError as e:
+                        if e.code == 404:
+                            es_result = {"hits": {"total": {"value": 0}, "hits": []}, "took": 0}
+                        else:
+                            raise Exception(f"Elasticsearch Error ({e.code}): {e.read().decode('utf-8')}")
+
+                    hits = es_result.get("hits", {}).get("hits", [])
+
+                    # Step 2: Load Object Storage config and download files
+                    os_config = db.query(ObjectStorageConfig).filter(
+                        ObjectStorageConfig.id == file_req_type.object_storage_config_id
+                    ).first()
+                    if not os_config:
+                        raise ValueError(
+                            f"ObjectStorageConfig '{file_req_type.object_storage_config_id}' not found"
+                        )
+                    if not os_config.is_active:
+                        raise ValueError(
+                            f"ObjectStorageConfig '{os_config.name}' is inactive"
+                        )
+
+                    handler = ObjectStorageHandler(os_config)
+                    mapping_config = file_req_type.object_storage_mapping or {}
+
+                    # Step 3: Enrich ES hits with base64 data from object storage
+                    enrichment = handler.enrich_es_hits_with_objects(hits, mapping_config)
+                    enriched_hits = enrichment["enriched_hits"]
+                    os_stats = enrichment["stats"]
+
+                    # Step 4: Build result (apply field/index mappings like standard ES flow)
+                    from collections import defaultdict
+
+                    field_map = file_req_type.field_mapping or {}
+                    index_map = file_req_type.index_mapping or {}
+
+                    grouped = defaultdict(list)
+                    for h in enriched_hits:
+                        source = h.get("_source", {})
+                        if field_map:
+                            mapped_source = {}
+                            for key, value in source.items():
+                                mapped_key = field_map.get(key, key)
+                                mapped_source[mapped_key] = value
+                            source = mapped_source
+
+                        raw_index = h.get("_index", "unknown")
+                        display_index = index_map.get(raw_index, raw_index)
+                        grouped[display_index].append(source)
+
+                    result_data = {
+                        "count": es_result.get("hits", {}).get("total", {}).get("value", 0),
+                        "results_by_index": dict(grouped),
+                        "object_storage_stats": os_stats,
+                    }
+
+                    end_time = datetime.utcnow()
+                    es_took = es_result.get("took", 0)
+                    total_time = es_took + os_stats.get("download_time_ms", 0)
+
+                    # Step 5: Save QueryResult
+                    existing_result = db.query(QueryResult).filter(QueryResult.request_id == req.id).first()
+                    if existing_result:
+                        existing_result.result_data = result_data
+                        existing_result.result_count = result_data["count"]
+                        existing_result.execution_time_ms = total_time
+                        existing_result.elasticsearch_took_ms = es_took
+                        existing_result.executed_at = end_time
+                        existing_result.cache_hit = False
+                    else:
+                        query_result = QueryResult(
+                            id=uuid.uuid4(),
+                            request_id=req.id,
+                            original_request_id=req.original_request_id,
+                            result_data=result_data,
+                            result_count=result_data["count"],
+                            execution_time_ms=total_time,
+                            elasticsearch_took_ms=es_took,
+                            cache_hit=False,
+                            executed_at=end_time,
+                        )
+                        db.add(query_result)
+
+                    req.status = "completed"
+                    req.completed_at = end_time
+                    req.progress = 100.0
+                    req.has_error = False
+
+                    db.commit()
+                    processed_count += 1
+
+                    logger.info(
+                        f"[OBJECT_STORAGE] Request {req.id} completed: "
+                        f"{os_stats['total_files_downloaded']} files downloaded, "
+                        f"{os_stats['total_size_bytes']} bytes, "
+                        f"{os_stats['download_time_ms']}ms download time"
+                    )
+                    continue
                 
                 # Default behavior: ElasticSearch Query
                 # Fetch Request Type
@@ -227,7 +408,7 @@ def execute_pending_queries(self):
                 query_body = render_template(request_type.elasticsearch_query_template, req.query_params or {})
                 
                 # Execute Query - Get Elasticsearch config from runtime database
-                index_name = request_type.available_indices[0] if request_type.available_indices else "default"
+                index_name = ",".join(request_type.available_indices) if request_type.available_indices else "default"
                 
                 # Try to get active Elasticsearch config from database
                 es_config = None
@@ -262,6 +443,11 @@ def execute_pending_queries(self):
                 import ssl
                 
                 req_data = json.dumps(query_body).encode('utf-8')
+                
+                # Log the query for debugging
+                logger.info(f"[ELASTICSEARCH] Executing query against {es_url}")
+                logger.debug(f"[ELASTICSEARCH] Query Payload: {json.dumps(query_body, ensure_ascii=False)}")
+                
                 req_obj = urllib.request.Request(es_url, data=req_data, headers={'Content-Type': 'application/json'})
                 
                 # Add authentication header if needed
@@ -298,6 +484,7 @@ def execute_pending_queries(self):
                 except urllib.error.HTTPError as e:
                      if e.code == 404:
                          # Index not found or similar -> Treat as empty result
+                         logger.warning(f"[ELASTICSEARCH] Got 404 Not Found from {es_url}. The index '{index_name}' might not exist.")
                          es_result = {"hits": {"total": {"value": 0}, "hits": []}, "took": 0}
                      else:
                          raise Exception(f"Elasticsearch Error ({e.code}): {e.read().decode('utf-8')}")
@@ -305,11 +492,36 @@ def execute_pending_queries(self):
                      raise Exception(f"Elasticsearch Connection Error: {str(e)}")
 
                 
-                # Transform Result
+                # Transform Result — Grouped by index with field & index mapping
+                from collections import defaultdict
+
                 hits = es_result.get("hits", {}).get("hits", [])
+
+                # Load mappings from RequestType
+                field_map = request_type.field_mapping or {}
+                index_map = request_type.index_mapping or {}
+
+                grouped = defaultdict(list)
+                for h in hits:
+                    source = h.get("_source", {})
+
+                    # Apply field mapping (rename keys)
+                    if field_map:
+                        mapped_source = {}
+                        for key, value in source.items():
+                            mapped_key = field_map.get(key, key)
+                            mapped_source[mapped_key] = value
+                        source = mapped_source
+
+                    # Apply index mapping (alias real index name)
+                    raw_index = h.get("_index", "unknown")
+                    display_index = index_map.get(raw_index, raw_index)
+
+                    grouped[display_index].append(source)
+
                 result_data = {
                     "count": es_result.get("hits", {}).get("total", {}).get("value", 0),
-                    "results": [h["_source"] for h in hits],
+                    "results_by_index": dict(grouped),
                 }
 
                 # Update or Create QueryResult

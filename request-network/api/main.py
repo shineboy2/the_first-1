@@ -85,7 +85,7 @@ if settings.BACKEND_CORS_ORIGINS:
 app.add_middleware(RateLimitGracePeriodMiddleware)
 
 # Include API routers
-from routers import user_management_router
+from routers import user_management_router, subuser_router
 app.include_router(auth_router.router, prefix=settings.API_V1_STR)
 app.include_router(captcha_router.router, prefix=settings.API_V1_STR)
 app.include_router(users_router.router, prefix=settings.API_V1_STR)
@@ -98,6 +98,7 @@ app.include_router(api_key_router.router, prefix=settings.API_V1_STR)
 app.include_router(request_types_router.router, prefix=settings.API_V1_STR)
 app.include_router(audit_router.router, prefix=settings.API_V1_STR)
 app.include_router(monitoring_router, prefix=settings.API_V1_STR)
+app.include_router(subuser_router.router, prefix=settings.API_V1_STR)
 
 # Admin Imports router
 app.include_router(admin_imports.router, prefix=f"{settings.API_V1_STR}/admin/imports", dependencies=[Depends(get_db_session)])

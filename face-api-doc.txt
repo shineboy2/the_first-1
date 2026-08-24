@@ -1,0 +1,462 @@
+POST
+​/auth​/login​/
+Create authorization token from username and password
+
+Use this method to obtain an authorization token that you can use in all other methods.
+
+To use method you should provide basic authorization credentials:
+
+    Username - username of your FF.Security account
+    Password - password for your FF.Security account
+
+This method returns a structure containing an authorization token.
+
+Copy its value, prepend it with "Token" and paste the entire thing into the Bearer field in the authorization form of this documentation viewer.
+
+If the system uses face AND password authorization -
+together with the Basic authorization header,
+additionally pass the token received during face authorization in the video_auth_token field.
+
+curl -X POST "http://192.168.1.1/auth/login/" -H  "accept: application/json" -H  "authorization: Basic NjEyOjYxMjYxMjYxMg==" -H  "Content-Type: application/json" -d "{  \"video_auth_token\": \"string\"}"
+http://192.168.1.1/auth/login/
+	
+Response body
+Download
+
+{
+  "user": {
+    "id": 4,
+    "active": true,
+    "created_date": "2024-11-17T03:58:30.069458Z",
+    "groups": [],
+    "modified_date": "2024-11-17T03:58:30.069897Z",
+    "permissions": [
+      "ffsecurity.view_faceevent",
+      "ffsecurity.view_faceobject",
+      "ffsecurity.view_dossier",
+      "ffsecurity.view_dossierlist",
+      "ffsecurity.view_runtimesetting",
+      "ffsecurity.view_upload",
+      "ffsecurity.change_notification",
+      "ffsecurity.view_notification",
+      "ffsecurity.change_metadictionary",
+      "ffsecurity.view_metadictionary"
+    ],
+    "real_name": "111",
+    "name": "111",
+    "comment": "",
+    "camera_group_permissions": {
+      "-1": "view"
+    },
+    "watch_list_permissions": {
+      "2": "view",
+      "3": "view",
+      "4": "view",
+      "5": "view",
+      "6": "view",
+      "7": "view",
+      "8": "view",
+      "9": "view",
+      "10": "view",
+      "11": "view",
+      "13": "view",
+      "14": "view",
+      "15": "view",
+      "16": "view",
+      "17": "view",
+      "18": "view",
+      "19": "view",
+      "21": "view",
+      "-1": "view"
+    },
+    "group_permissions": {},
+    "primary_group": 6,
+    "language": "en-us",
+    "has_face": false
+  },
+  "token": "b48d7532c7ac602793d32ba4e5b0e02f2adcd9fb837d47ff0ea5f7b05aeaed83"
+}
+ =====================================================================================
+curl -X POST "http://192.168.1.1/detect" -H  "accept: application/json" -H  "Authorization: Token b48d7532c7ac602793d32ba4e5b0e02f2adcd9fb837d47ff0ea5f7b05aeaed83" -H  "Content-Type: multipart/form-data" -F "photo=@1461408253_e094011ca1ee420a0de5c20c1098a3ea.jpg;type=image/jpeg" -F "attributes={"face": {}}"
+{
+  "orientation": 1,
+  "objects": {
+    "face": [
+      {
+        "id": "d90h2rgt874cndlqmkeg",
+        "bbox": {
+          "left": 70,
+          "top": 104,
+          "right": 281,
+          "bottom": 365
+        },
+        "detection_score": 0.8662971,
+        "low_quality": false,
+        "features": {}
+      }
+    ]
+  }
+}
+=========================================================================================================
+curl -X GET "http://192.168.1.1/dossiers/?looks_like=detection%3Ad90h2rgt874cndlqmkeg" -H  "accept: application/json" -H  "Authorization: Token b48d7532c7ac602793d32ba4e5b0e02f2adcd9fb837d47ff0ea5f7b05aeaed83"
+
+{
+  "next_page": "http://192.168.1.1/dossiers/?looks_like=detection%3Ad90h2rgt874cndlqmkeg&page=2ar7pCV2eBppZOqUkizHfuK2FxxB4sHq52RkUtKSZSSbMkSMNej6ucZJw",
+  "prev_page": null,
+  "results": [
+    {
+      "id": 165229643,
+      "active": true,
+      "created_date": "2024-11-16T18:48:37.736951Z",
+      "modified_date": "2024-11-16T18:48:37.737001Z",
+      "name": "SND-7874-WAF.jpg",
+      "comment": "",
+      "dossier_lists": [
+        11
+      ],
+      "face_count": 1,
+      "has_faces": true,
+      "body_count": 0,
+      "has_bodies": false,
+      "car_count": 0,
+      "has_cars": false,
+      "looks_like": {
+        "confidence": 0.7082,
+        "matched_object": "4648719372812618715"
+      },
+      "meta": {},
+      "person_id": null,
+      "car_license_plate_number": null
+    },
+    {
+      "id": 163012821,
+      "active": true,
+      "created_date": "2024-11-06T06:12:00.335994Z",
+      "modified_date": "2024-11-06T06:12:00.336018Z",
+      "name": "3110363550.jpg",
+      "comment": "",
+      "dossier_lists": [
+        13
+      ],
+      "face_count": 1,
+      "has_faces": true,
+      "body_count": 0,
+      "has_bodies": false,
+      "car_count": 0,
+      "has_cars": false,
+      "looks_like": {
+        "confidence": 0.7063,
+        "matched_object": "4646278227531791474"
+      },
+      "meta": {},
+      "person_id": null,
+      "car_license_plate_number": null
+    },
+    {
+      "id": 148910330,
+      "active": true,
+      "created_date": "2024-10-31T22:31:09.751616Z",
+      "modified_date": "2024-10-31T22:31:09.751640Z",
+      "name": "4431533028.jpg",
+      "comment": "",
+      "dossier_lists": [
+        10
+      ],
+      "face_count": 1,
+      "has_faces": true,
+      "body_count": 0,
+      "has_bodies": false,
+      "car_count": 0,
+      "has_cars": false,
+      "looks_like": {
+        "confidence": 0.7129,
+        "matched_object": "4645044362350837451"
+      },
+      "meta": {},
+      "person_id": null,
+      "car_license_plate_number": null
+    },
+    {
+      "id": 144765488,
+      "active": true,
+      "created_date": "2024-10-30T22:00:55.861927Z",
+      "modified_date": "2024-10-30T22:00:55.861962Z",
+      "name": "5859975635.jpg",
+      "comment": "",
+      "dossier_lists": [
+        8
+      ],
+      "face_count": 1,
+      "has_faces": true,
+      "body_count": 0,
+      "has_bodies": false,
+      "car_count": 0,
+      "has_cars": false,
+      "looks_like": {
+        "confidence": 0.7331,
+        "matched_object": "4644807565029373169"
+      },
+      "meta": {},
+      "person_id": null,
+      "car_license_plate_number": null
+    },
+    {
+      "id": 142963831,
+      "active": true,
+      "created_date": "2024-10-30T14:49:09.528442Z",
+      "modified_date": "2024-10-30T14:49:09.528467Z",
+      "name": "4220373810.jpg",
+      "comment": "",
+      "dossier_lists": [
+        8
+      ],
+      "face_count": 1,
+      "has_faces": true,
+      "body_count": 0,
+      "has_bodies": false,
+      "car_count": 0,
+      "has_cars": false,
+      "looks_like": {
+        "confidence": 0.7056,
+        "matched_object": "4644738023181334833"
+      },
+      "meta": {},
+      "person_id": null,
+      "car_license_plate_number": null
+    },
+    {
+      "id": 106315698,
+      "active": true,
+      "created_date": "2024-10-20T05:45:36.839808Z",
+      "modified_date": "2024-10-20T05:45:36.839839Z",
+      "name": "0386699747.jpg",
+      "comment": "",
+      "dossier_lists": [
+        2
+      ],
+      "face_count": 1,
+      "has_faces": true,
+      "body_count": 0,
+      "has_bodies": false,
+      "car_count": 0,
+      "has_cars": false,
+      "looks_like": {
+        "confidence": 0.7049,
+        "matched_object": "4642331196852226382"
+      },
+      "meta": {},
+      "person_id": null,
+      "car_license_plate_number": null
+    },
+    {
+      "id": 104685758,
+      "active": true,
+      "created_date": "2024-10-19T16:17:51.396942Z",
+      "modified_date": "2024-10-19T16:17:51.396968Z",
+      "name": "0047653531.jpg",
+      "comment": "",
+      "dossier_lists": [
+        2
+      ],
+      "face_count": 1,
+      "has_faces": true,
+      "body_count": 0,
+      "has_bodies": false,
+      "car_count": 0,
+      "has_cars": false,
+      "looks_like": {
+        "confidence": 0.7092,
+        "matched_object": "4642201098523564837"
+      },
+      "meta": {},
+      "person_id": null,
+      "car_license_plate_number": null
+    },
+    {
+      "id": 102779200,
+      "active": true,
+      "created_date": "2024-10-19T03:40:02.923343Z",
+      "modified_date": "2024-10-19T03:40:02.923371Z",
+      "name": "2064355081_1401.jpg",
+      "comment": "",
+      "dossier_lists": [
+        6
+      ],
+      "face_count": 1,
+      "has_faces": true,
+      "body_count": 0,
+      "has_bodies": false,
+      "car_count": 0,
+      "has_cars": false,
+      "looks_like": {
+        "confidence": 0.7087,
+        "matched_object": "4642079044849327854"
+      },
+      "meta": {},
+      "person_id": null,
+      "car_license_plate_number": null
+    },
+    {
+      "id": 101760538,
+      "active": true,
+      "created_date": "2024-10-18T22:30:07.173563Z",
+      "modified_date": "2024-10-18T22:30:07.173591Z",
+      "name": "1899504291_1_1402.jpg",
+      "comment": "",
+      "dossier_lists": [
+        6
+      ],
+      "face_count": 1,
+      "has_faces": true,
+      "body_count": 0,
+      "has_bodies": false,
+      "car_count": 0,
+      "has_cars": false,
+      "looks_like": {
+        "confidence": 0.7244,
+        "matched_object": "4642029127407509279"
+      },
+      "meta": {},
+      "person_id": null,
+      "car_license_plate_number": null
+    },
+    {
+      "id": 100705658,
+      "active": true,
+      "created_date": "2024-10-18T17:02:44.272080Z",
+      "modified_date": "2024-10-18T17:02:44.272109Z",
+      "name": "1753190304_1401.jpg",
+      "comment": "",
+      "dossier_lists": [
+        6
+      ],
+      "face_count": 1,
+      "has_faces": true,
+      "body_count": 0,
+      "has_bodies": false,
+      "car_count": 0,
+      "has_cars": false,
+      "looks_like": {
+        "confidence": 0.7161,
+        "matched_object": "4641976398570085304"
+      },
+      "meta": {},
+      "person_id": null,
+      "car_license_plate_number": null
+    }
+  ]
+}
+
+=========================================================================================================
+
+curl -X GET "http://192.168.1.1/objects/faces/?id_in=4648719372812618715%2C4646278227531791474" -H  "accept: application/json" -H  "Authorization: Token b48d7532c7ac602793d32ba4e5b0e02f2adcd9fb837d47ff0ea5f7b05aeaed83"
+
+{
+  "next_page": null,
+  "count": 2,
+  "results": [
+    {
+      "dossier": 163012821,
+      "created_date": "2024-11-06T06:12:00+00:00",
+      "modified_date": "1970-01-01T00:00:00+00:00",
+      "source_photo_name": "3110363550.jpg",
+      "source_photo": "http://192.168.1.1/uploads/dossiers/163012821/face_3110363550_prV15L.jpg",
+      "thumbnail": "http://192.168.1.1/uploads/dossiers/163012821/face_3110363550_thumbnail_ceatv1.jpg",
+      "source_coords_left": 20,
+      "source_coords_top": 29,
+      "source_coords_right": 110,
+      "source_coords_bottom": 145,
+      "active": true,
+      "features": {},
+      "id": "4646278227531791474",
+      "meta": {}
+    },
+    {
+      "dossier": 165229643,
+      "created_date": "2024-11-16T18:48:37+00:00",
+      "modified_date": "1970-01-01T00:00:00+00:00",
+      "source_photo_name": "SND-7874-WAF.jpg",
+      "source_photo": "http://192.168.1.1/uploads/dossiers/165229643/face_SND-7874-WAF_NGPKni.jpg",
+      "thumbnail": "http://192.168.1.1/uploads/dossiers/165229643/face_SND-7874-WAF_thumbnail_iRPzK6.jpg",
+      "source_coords_left": 48,
+      "source_coords_top": 92,
+      "source_coords_right": 115,
+      "source_coords_bottom": 184,
+      "active": true,
+      "features": {},
+      "id": "4648719372812618715",
+      "meta": {}
+    }
+  ]
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+*****
+POST /detect/ HTTP/1.1
+Host: 192.168.1.1
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:151.0) Gecko/20100101 Firefox/151.0
+Accept: application/json, text/plain, */*, application/json
+Accept-Language: en-US;q=0.9, en;q=0.6, *;q=0.5
+Accept-Encoding: gzip, deflate
+authorization: Token 688f506df037c2a9b60c151fec1cbc7e9b6a39bd865f3e0dc4382803c4a3aecc
+X-UUID: bf5de98d-d044-4034-a365-183ca39d9ff4
+Content-Type: multipart/form-data; boundary=----geckoformboundaryaa45ebbe923cc6c4fac6fa78e1e4d0a1
+Content-Length: 19415
+Origin: http://192.168.1.1
+Connection: keep-alive
+Referer: http://192.168.1.1/
+Cookie: csrftoken=0opBECniw5WAR5Qa7VZ1xIUmOAmTXA4S32ONeHeIRze8nRsKrkl8D45n7ESqd714
+Pragma: no-cache
+Cache-Control: no-cache
+response:
+{"orientation":1,"objects":{"face":[{"id":"d90hhigt874cndlqmlb0","bbox":{"left":70,"top":104,"right":281,"bottom":365},"detection_score":0.8662971,"low_quality":false,"features":{}}]}}
+
+
+GET /dossiers/?looks_like=detection%3Ad90hhigt874cndlqmlb0&threshold=0.75&limit=10&ordering=-looks_like_confidence&objectsType=faces&sourceType=upload&targetType=dossiers HTTP/1.1
+Host: 192.168.1.1
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:151.0) Gecko/20100101 Firefox/151.0
+Accept: application/json, text/plain, */*, application/json
+Accept-Language: en-US;q=0.9, en;q=0.6, *;q=0.5
+Accept-Encoding: gzip, deflate
+authorization: Token 688f506df037c2a9b60c151fec1cbc7e9b6a39bd865f3e0dc4382803c4a3aecc
+X-UUID: bf5de98d-d044-4034-a365-183ca39d9ff4
+Connection: keep-alive
+Referer: http://192.168.1.1/
+Cookie: csrftoken=0opBECniw5WAR5Qa7VZ1xIUmOAmTXA4S32ONeHeIRze8nRsKrkl8D45n7ESqd714
+Priority: u=0
+Pragma: no-cache
+Cache-Control: no-cache
+response:
+{"next_page":null,"prev_page":null,"results":[{"id":98935496,"active":true,"created_date":"2024-10-18T08:07:02.694928Z","modified_date":"2024-10-18T08:07:02.694959Z","name":"1461408253_1401.jpg","comment":"","dossier_lists":[6],"face_count":1,"has_faces":true,"body_count":0,"has_bodies":false,"car_count":0,"has_cars":false,"looks_like":{"confidence":0.9999,"matched_object":"4641890119058798540"},"meta":{},"person_id":null,"car_license_plate_number":null},{"id":13222247,"active":true,"created_date":"2024-09-30T09:12:01.782520Z","modified_date":"2024-09-30T09:12:01.782551Z","name":"1461408253.jpg","comment":"","dossier_lists":[3],"face_count":1,"has_faces":true,"body_count":0,"has_bodies":false,"car_count":0,"has_cars":false,"looks_like":{"confidence":0.918,"matched_object":"4637725877856696099"},"meta":{},"person_id":null,"car_license_plate_number":null},{"id":98935455,"active":true,"created_date":"2024-10-18T08:07:02.035513Z","modified_date":"2024-10-18T08:07:02.035555Z","name":"1461408253_1396.jpg","comment":"","dossier_lists":[6],"face_count":1,"has_faces":true,"body_count":0,"has_bodies":false,"car_count":0,"has_cars":false,"looks_like":{"confidence":0.9178,"matched_object":"4641890117688729759"},"meta":{},"person_id":null,"car_license_plate_number":null},{"id":55762178,"active":true,"created_date":"2024-10-08T15:00:58.691943Z","modified_date":"2024-10-08T15:00:58.691972Z","name":"1461408253_1392.jpg","comment":"","dossier_lists":[6],"face_count":1,"has_faces":true,"body_count":0,"has_bodies":false,"car_count":0,"has_cars":false,"looks_like":{"confidence":0.907,"matched_object":"4639637505648760184"},"meta":{},"person_id":null,"car_license_plate_number":null}]}
+
+
+GET /objects/faces/?id_in=4641890119058798540%2C4637725877856696099%2C4641890117688729759%2C4639637505648760184&limit=200 HTTP/1.1
+Host: 192.168.1.1
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:151.0) Gecko/20100101 Firefox/151.0
+Accept: application/json, text/plain, */*, application/json
+Accept-Language: en-US;q=0.9, en;q=0.6, *;q=0.5
+Accept-Encoding: gzip, deflate
+authorization: Token 688f506df037c2a9b60c151fec1cbc7e9b6a39bd865f3e0dc4382803c4a3aecc
+X-UUID: bf5de98d-d044-4034-a365-183ca39d9ff4
+Connection: keep-alive
+Referer: http://192.168.1.1/
+Cookie: csrftoken=0opBECniw5WAR5Qa7VZ1xIUmOAmTXA4S32ONeHeIRze8nRsKrkl8D45n7ESqd714
+Pragma: no-cache
+Cache-Control: no-cache
+
+response:
+{"next_page":null,"count":4,"results":[{"dossier":13222247,"created_date":"2024-09-30T09:12:01+00:00","modified_date":"1970-01-01T00:00:00+00:00","source_photo_name":"1461408253.jpg","source_photo":"http://192.168.1.1/uploads/dossiers/13222247/face_1461408253_MEOFlk.jpg","thumbnail":"http://192.168.1.1/uploads/dossiers/13222247/face_1461408253_thumbnail_FEPxAN.jpg","source_coords_left":43,"source_coords_top":72,"source_coords_right":174,"source_coords_bottom":234,"active":true,"features":{},"id":"4637725877856696099","meta":{}},{"dossier":55762178,"created_date":"2024-10-08T15:00:58+00:00","modified_date":"1970-01-01T00:00:00+00:00","source_photo_name":"1461408253_1392.jpg","source_photo":"http://192.168.1.1/uploads/dossiers/55762178/face_1461408253_1392_CXdX30.jpg","thumbnail":"http://192.168.1.1/uploads/dossiers/55762178/face_1461408253_1392_thumbnail_1SoZxw.jpg","source_coords_left":81,"source_coords_top":130,"source_coords_right":302,"source_coords_bottom":417,"active":true,"features":{},"id":"4639637505648760184","meta":{}},{"dossier":98935455,"created_date":"2024-10-18T08:07:02+00:00","modified_date":"1970-01-01T00:00:00+00:00","source_photo_name":"1461408253_1396.jpg","source_photo":"http://192.168.1.1/uploads/dossiers/98935455/face_1461408253_1396_OFIdEZ.jpg","thumbnail":"http://192.168.1.1/uploads/dossiers/98935455/face_1461408253_1396_thumbnail_1m670j.jpg","source_coords_left":117,"source_coords_top":114,"source_coords_right":315,"source_coords_bottom":387,"active":true,"features":{},"id":"4641890117688729759","meta":{}},{"dossier":98935496,"created_date":"2024-10-18T08:07:02+00:00","modified_date":"1970-01-01T00:00:00+00:00","source_photo_name":"1461408253_1401.jpg","source_photo":"http://192.168.1.1/uploads/dossiers/98935496/face_1461408253_1401_QPLYun.jpg","thumbnail":"http://192.168.1.1/uploads/dossiers/98935496/face_1461408253_1401_thumbnail_a2Mvrg.jpg","source_coords_left":70,"source_coords_top":104,"source_coords_right":281,"source_coords_bottom":365,"active":true,"features":{},"id":"4641890119058798540","meta":{}}]}

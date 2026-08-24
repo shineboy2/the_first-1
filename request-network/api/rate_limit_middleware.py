@@ -39,66 +39,106 @@ class RateLimitGracePeriodMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         
         # فقط برای authenticated requests
-        user_id = request.headers.get("X-User-ID") or request.headers.get("user_id")
-        profile = request.headers.get("X-User-Profile", "free")
-        sub_user_id = request.headers.get("X-End-User-Id") or request.headers.get("X-User-Id") # Fallback to X-User-Id if they send it like that
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            return await call_next(request)
+            
+        token = auth_header.split(" ")[1]
         
-        if not user_id:
-            # ادامه بدون بررسی rate limit
-            response = await call_next(request)
-            return response
+        try:
+            # We import here to avoid circular imports if any
+            from auth.security import decode_access_token
+            token_data = decode_access_token(token)
+            if not token_data or not token_data.user_id:
+                return await call_next(request)
+            user_id = str(token_data.user_id)
+        except Exception:
+            return await call_next(request)
+            
+        # Unify Sub-User ID header
+        sub_user_id = request.headers.get("X-Sub-User-Id")
         
         try:
             redis_client = await get_redis_client()
             rate_limiter = RateLimiter(redis_client.client)
 
-            # SubUser Logic
-            if sub_user_id:
-                async with AsyncSessionFactory() as db:
-                    # Fetch Enterprise User to get sub-user rate limits
-                    stmt = select(User).where(User.id == user_id)
-                    result = await db.execute(stmt)
-                    enterprise_user = result.scalars().first()
+            async with AsyncSessionFactory() as db:
+                # Fetch Enterprise User to get profile and limits
+                stmt = select(User).where(User.id == user_id)
+                result = await db.execute(stmt)
+                enterprise_user = result.scalars().first()
 
-                    if enterprise_user:
-                        subuser_limits = {
-                            "minute": enterprise_user.subuser_rate_limit_per_minute,
-                            "hour": enterprise_user.subuser_rate_limit_per_hour,
-                            "day": enterprise_user.subuser_rate_limit_per_day,
-                        }
+                if not enterprise_user:
+                    return await call_next(request)
+                
+                profile = enterprise_user.profile_type
 
-                        # JIT Provisioning
-                        stmt_sub = select(SubUser).where(
-                            SubUser.enterprise_user_id == enterprise_user.id,
-                            SubUser.external_user_id == sub_user_id
-                        )
-                        sub_result = await db.execute(stmt_sub)
-                        sub_user = sub_result.scalars().first()
+                # SubUser Logic
+                if sub_user_id:
+                    subuser_limits = {
+                        "minute": enterprise_user.subuser_rate_limit_per_minute,
+                        "hour": enterprise_user.subuser_rate_limit_per_hour,
+                        "day": enterprise_user.subuser_rate_limit_per_day,
+                    }
 
-                        if not sub_user:
-                            sub_user = SubUser(
-                                enterprise_user_id=enterprise_user.id,
-                                external_user_id=sub_user_id
-                            )
-                            db.add(sub_user)
-                            await db.commit()
+                    # JIT Provisioning
+                    stmt_sub = select(SubUser).where(
+                        SubUser.enterprise_user_id == enterprise_user.id,
+                        SubUser.external_user_id == sub_user_id
+                    )
+                    sub_result = await db.execute(stmt_sub)
+                    sub_user = sub_result.scalars().first()
 
-                        # Check Sub-user Rate Limit
-                        sub_level, sub_details = await rate_limiter.check_subuser_limit(
-                            str(enterprise_user.id), sub_user_id, subuser_limits
-                        )
-
-                        if sub_level == LimitLevel.EXCEEDED:
-                            logger.warning(f"Subuser {sub_user_id} exceeded rate limit")
+                    if not sub_user:
+                        # Check Max Subusers Limit
+                        max_subusers = getattr(enterprise_user, 'max_subusers', 10)
+                        count_stmt = select(db.func.count(SubUser.id)).where(SubUser.enterprise_user_id == enterprise_user.id)
+                        current_subusers = await db.scalar(count_stmt)
+                        
+                        if current_subusers >= max_subusers:
                             return JSONResponse(
-                                status_code=429,
-                                content={
-                                    "detail": f"Subuser Rate limit exceeded for {sub_details['hit_limit']}",
-                                    "retry_after": 60,
-                                    "limit_exceeded": sub_details["hit_limit"],
-                                },
-                                headers={"X-RateLimit-Status": "EXCEEDED"}
+                                status_code=403,
+                                content={"detail": f"Maximum number of sub-users ({max_subusers}) reached for this enterprise account."},
                             )
+                        
+                        # Validate sub_user_id format
+                        import re
+                        if not re.match(r'^[\w\-]{1,255}$', sub_user_id):
+                            return JSONResponse(
+                                status_code=400,
+                                content={"detail": "Invalid X-Sub-User-Id format. Use 1-255 alphanumeric characters, dashes, or underscores."},
+                            )
+                            
+                        sub_user = SubUser(
+                            enterprise_user_id=enterprise_user.id,
+                            external_user_id=sub_user_id
+                        )
+                        db.add(sub_user)
+                        await db.commit()
+
+                    # Update last request stats for sub-user
+                    sub_user.last_request_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown").split(",")[0].strip()
+                    sub_user.last_request_at = db.func.now()
+                    sub_user.request_count = (sub_user.request_count or 0) + 1
+                    db.add(sub_user)
+                    await db.commit()
+
+                    # Check Sub-user Rate Limit
+                    sub_level, sub_details = await rate_limiter.check_subuser_limit(
+                        str(enterprise_user.id), sub_user_id, subuser_limits
+                    )
+
+                    if sub_level == LimitLevel.EXCEEDED:
+                        logger.warning(f"Subuser {sub_user_id} exceeded rate limit")
+                        return JSONResponse(
+                            status_code=429,
+                            content={
+                                "detail": f"Subuser Rate limit exceeded for {sub_details['hit_limit']}",
+                                "retry_after": 60,
+                                "limit_exceeded": sub_details["hit_limit"],
+                            },
+                            headers={"X-RateLimit-Status": "EXCEEDED"}
+                        )
 
             # بررسی Rate Limit اصلی اینترپرایز
             limit_level, details = await rate_limiter.check_limit(user_id, profile)

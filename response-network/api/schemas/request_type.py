@@ -36,9 +36,13 @@ class RequestTypeBase(BaseModel):
     max_items_per_request: int = Field(100, ge=1, le=1000)
     available_indices: List[str] = Field(default=["default"])
     elasticsearch_query_template: Dict = Field(default_factory=dict, description="Elasticsearch query template with placeholders")
+    field_mapping: Optional[Dict] = Field(default_factory=dict, description="Rename ES fields in output, e.g. {'name': 'نام'}")
+    index_mapping: Optional[Dict] = Field(default_factory=dict, description="Alias real index names, e.g. {'hotels_idx': 'هتل‌ها'}")
     execution_method: str = Field(default="elasticsearch")
     external_api_id: Optional[UUID] = None
     file_request_config_id: Optional[UUID] = None
+    object_storage_config_id: Optional[UUID] = None
+    object_storage_mapping: Optional[Dict] = Field(default=None, description="Mapping config for object storage paths from ES results")
 
 
 # Step 1: Initial creation with name and description
@@ -49,6 +53,7 @@ class RequestTypeCreateInitial(BaseModel):
     execution_method: str = Field(default="elasticsearch")
     external_api_id: Optional[UUID] = None
     file_request_config_id: Optional[UUID] = None
+    object_storage_config_id: Optional[UUID] = None
 
 
 # Step 2: Configure parameters and limits
@@ -57,10 +62,14 @@ class RequestTypeConfigureParams(BaseModel):
     is_public: bool = False
     max_items_per_request: int = Field(100, ge=1, le=1000)
     available_indices: List[str] = Field(default=["default"])
+    field_mapping: Optional[Dict] = Field(default_factory=dict, description="Rename ES fields in output")
+    index_mapping: Optional[Dict] = Field(default_factory=dict, description="Alias real index names")
     parameters: List[RequestTypeParameterCreate]
     execution_method: Optional[str] = None
     external_api_id: Optional[UUID] = None
     file_request_config_id: Optional[UUID] = None
+    object_storage_config_id: Optional[UUID] = None
+    object_storage_mapping: Optional[Dict] = Field(default=None, description="Mapping config for object storage paths")
 
 
 # Step 3: Configure Elasticsearch query
@@ -86,6 +95,10 @@ class RequestTypeUpdate(BaseModel):
     is_active: Optional[bool] = None
     version: Optional[str] = None
     max_items_per_request: Optional[int] = None
+    field_mapping: Optional[Dict] = None
+    index_mapping: Optional[Dict] = None
     execution_method: Optional[str] = None
     external_api_id: Optional[UUID] = None
     file_request_config_id: Optional[UUID] = None
+    object_storage_config_id: Optional[UUID] = None
+    object_storage_mapping: Optional[Dict] = None

@@ -13,7 +13,7 @@ from auth import security
 
 # This tells FastAPI where to go to get a token.
 # The client will send a POST request to this URL with username and password.
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 
 
 async def get_current_user(

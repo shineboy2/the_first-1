@@ -17,6 +17,7 @@ from .sync_history import SyncHistory
 from .ftp_profile import FTPProfile
 from .file_request_config import FileRequestConfig
 from .file_request import FileRequest
+from .object_storage_config import ObjectStorageConfig
 from .audit_log import AuditLog
 
 __all__ = [
@@ -40,5 +41,6 @@ __all__ = [
     "FTPProfile",
     "FileRequestConfig",
     "FileRequest",
+    "ObjectStorageConfig",
 ]
 

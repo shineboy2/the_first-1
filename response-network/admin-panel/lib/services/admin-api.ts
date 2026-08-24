@@ -114,9 +114,13 @@ export interface RequestType {
   max_items_per_request: number;
   available_indices: string[];
   elasticsearch_query_template: Record<string, unknown> | null;
+  field_mapping?: Record<string, string> | null;
+  index_mapping?: Record<string, string> | null;
   execution_method?: string;
   external_api_id?: string | null;
   file_request_config_id?: string | null;
+  object_storage_config_id?: string | null;
+  object_storage_mapping?: Record<string, unknown> | null;
   parameters?: Array<{
     name: string;
     description?: string;
@@ -180,6 +184,65 @@ export interface ElasticsearchConfigUpdate {
   username?: string;
   password?: string;
   verify_ssl?: boolean;
+  is_active?: boolean;
+}
+
+// ============================================================================
+// Object Storage Configuration (Ceph/MinIO)
+// ============================================================================
+
+export interface ObjectStorageConfig {
+  id: string;
+  name: string;
+  display_name: string;
+  description: string | null;
+  storage_type: string;
+  endpoint_url: string;
+  access_key: string;
+  region: string;
+  default_bucket: string;
+  use_ssl: boolean;
+  verify_ssl: boolean;
+  path_style: boolean;
+  timeout: number;
+  is_active: boolean;
+  last_tested_at: string | null;
+  last_test_result: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ObjectStorageConfigCreate {
+  name: string;
+  display_name: string;
+  description?: string;
+  storage_type?: string;
+  endpoint_url: string;
+  access_key: string;
+  secret_key: string;
+  region?: string;
+  default_bucket: string;
+  use_ssl?: boolean;
+  verify_ssl?: boolean;
+  path_style?: boolean;
+  timeout?: number;
+  is_active?: boolean;
+}
+
+export interface ObjectStorageConfigUpdate {
+  name?: string;
+  display_name?: string;
+  description?: string;
+  storage_type?: string;
+  endpoint_url?: string;
+  access_key?: string;
+  secret_key?: string;
+  region?: string;
+  default_bucket?: string;
+  use_ssl?: boolean;
+  verify_ssl?: boolean;
+  path_style?: boolean;
+  timeout?: number;
   is_active?: boolean;
 }
 
@@ -417,7 +480,7 @@ export const requestService = {
   },
 
   async configureRequestTypeParams(id: string, data: unknown): Promise<RequestType> {
-    const response = await api.put(`/api/v1/request-types/${id}/configure`, data);
+    const response = await api.put(`/api/v1/request-types/${id}/params`, data);
     return response.data;
   },
 
@@ -1098,3 +1161,43 @@ const adminApi = {
 };
 
 export default adminApi;
+
+// ============================================================================
+// Object Storage Config Service
+// ============================================================================
+
+export const objectStorageConfigService = {
+  async getConfigs(): Promise<ObjectStorageConfig[]> {
+    const response = await api.get("/api/v1/admin/object-storage/config");
+    return response.data;
+  },
+  
+  async getConfig(id: string): Promise<ObjectStorageConfig> {
+    const response = await api.get(`/api/v1/admin/object-storage/config/${id}`);
+    return response.data;
+  },
+  
+  async createConfig(data: ObjectStorageConfigCreate): Promise<ObjectStorageConfig> {
+    const response = await api.post("/api/v1/admin/object-storage/config", data);
+    return response.data;
+  },
+  
+  async updateConfig(id: string, data: ObjectStorageConfigUpdate): Promise<ObjectStorageConfig> {
+    const response = await api.put(`/api/v1/admin/object-storage/config/${id}`, data);
+    return response.data;
+  },
+  
+  async deleteConfig(id: string): Promise<void> {
+    await api.delete(`/api/v1/admin/object-storage/config/${id}`);
+  },
+  
+  async testConnection(id: string): Promise<{success: boolean, message: string}> {
+    const response = await api.post(`/api/v1/admin/object-storage/config/${id}/test`);
+    return response.data;
+  },
+  
+  async testNewConnection(data: ObjectStorageConfigCreate): Promise<{success: boolean, message: string}> {
+    const response = await api.post(`/api/v1/admin/object-storage/config/test-new`, data);
+    return response.data;
+  }
+};
