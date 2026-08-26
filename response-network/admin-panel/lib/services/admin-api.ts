@@ -1139,33 +1139,6 @@ export const auditLogService = {
   }
 };
 
-const adminApi = {
-  healthService,
-  statsService,
-  userService,
-  requestService,
-
-  settingsService,
-  monitoringService,
-  profileTypeService,
-  workerService,
-  adminTasksService,
-  celerySchedulesService,
-  exportConfigService,
-  storageConfigService,
-  externalApiService,
-  elasticsearchConfigService,
-  ftpProfileService,
-  fileRequestConfigService,
-  auditLogService,
-};
-
-export default adminApi;
-
-// ============================================================================
-// Object Storage Config Service
-// ============================================================================
-
 export const objectStorageConfigService = {
   async getConfigs(): Promise<ObjectStorageConfig[]> {
     const response = await api.get("/api/v1/admin/object-storage/config");
@@ -1201,3 +1174,28 @@ export const objectStorageConfigService = {
     return response.data;
   }
 };
+
+const adminApi = {
+  healthService,
+  statsService,
+  userService,
+  requestService,
+
+  settingsService,
+  monitoringService,
+  profileTypeService,
+  workerService,
+  adminTasksService,
+  celerySchedulesService,
+  exportConfigService,
+  storageConfigService,
+  externalApiService,
+  elasticsearchConfigService,
+  ftpProfileService,
+  fileRequestConfigService,
+  auditLogService,
+  objectStorageConfigService,
+};
+
+export default adminApi;
+

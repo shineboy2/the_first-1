@@ -36,7 +36,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2 } from "lucide-react";
 
-import { adminApi, ObjectStorageConfig } from "@/lib/services/admin-api";
+import adminApi, { ObjectStorageConfig } from "@/lib/services/admin-api";
 import { CreateObjectStorageConfigDialog } from "@/components/object-storage-configs/create-dialog";
 import { EditObjectStorageConfigDialog } from "@/components/object-storage-configs/edit-dialog";
 

@@ -14,7 +14,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, Loader2, CheckCircle2 } from "lucide-react";
-import { adminApi, ObjectStorageConfigCreate } from "@/lib/services/admin-api";
+import adminApi from "@/lib/services/admin-api";
+import type { ObjectStorageConfigCreate } from "@/lib/services/admin-api";
 import { Textarea } from "@/components/ui/textarea";
 
 interface CreateObjectStorageConfigDialogProps {

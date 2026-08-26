@@ -88,8 +88,9 @@ export function EditRequestTypeDialog({
         const fetchObjectStorageConfigs = async () => {
             try {
                 setLoadingStorage(true);
-                const { adminApi } = await import('@/lib/services/admin-api');
-                const configs = await adminApi.objectStorageConfigService.getConfigs();
+                const adminApiModule = await import('@/lib/services/admin-api');
+                const adminApiDefault = adminApiModule.default;
+                const configs = await adminApiDefault.objectStorageConfigService.getConfigs();
                 setObjectStorageConfigs(Array.isArray(configs) ? configs : []);
             } catch (err) {
                 console.error("Error fetching object storage configs:", err);

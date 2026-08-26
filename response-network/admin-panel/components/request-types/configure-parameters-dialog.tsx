@@ -35,6 +35,10 @@ import {
 import { requestService, externalApiService } from "@/lib/services/admin-api";
 import type { RequestType, ExternalAPI } from "@/lib/services/admin-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Textarea } from "@/components/ui/textarea";
+import {
+    FormDescription,
+} from "@/components/ui/form";
 
 const parameterSchema = z.object({
     name: z.string().min(1, "نام الزامی است"),
@@ -156,7 +160,7 @@ export function ConfigureParametersDialog({
                 field_mapping_entries: fieldEntries,
                 index_mapping_entries: indexEntries,
                 // @ts-ignore
-                object_storage_mapping_str: requestType.object_storage_mapping 
+                object_storage_mapping_str: requestType.object_storage_mapping
                     // @ts-ignore
                     ? JSON.stringify(requestType.object_storage_mapping, null, 2)
                     : '{\n  "file_paths": ["doc.path"],\n  "bucket_field": "doc.bucket",\n  "base_prefix": ""\n}',
@@ -181,10 +185,10 @@ export function ConfigureParametersDialog({
 
         try {
             setError(null);
-            
+
             // Map target_index to available_indices array (support comma-separated multiple indices)
             const indices = data.target_index.split(",").map(i => i.trim()).filter(i => i);
-            
+
             // Convert entry arrays back to mapping objects
             const fieldMapping: Record<string, string> = {};
             for (const entry of data.field_mapping_entries || []) {
@@ -215,7 +219,7 @@ export function ConfigureParametersDialog({
                 is_active: requestType.is_active ?? false,
                 is_public: requestType.is_public ?? false,
             };
-            
+
             await requestService.configureRequestTypeParams(requestType.id, submitData);
             onSuccess();
             onOpenChange(false);
@@ -280,6 +284,7 @@ export function ConfigureParametersDialog({
                                                 <SelectItem value="elasticsearch">پایگاه داده (Elasticsearch)</SelectItem>
                                                 <SelectItem value="external_api">API خارجی (External API)</SelectItem>
                                                 <SelectItem value="file_request">درخواست فایلی (File Request)</SelectItem>
+                                                <SelectItem value="object_storage">آبجکت استورج (Object Storage)</SelectItem>
                                             </SelectContent>
                                         </Select>
                                         <FormMessage />
@@ -339,27 +344,88 @@ export function ConfigureParametersDialog({
                         </div>
 
                         {executionMethod === "object_storage" && (
-                            <FormField
-                                control={form.control}
-                                name="object_storage_mapping_str"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>تنظیمات نگاشت Object Storage (JSON)</FormLabel>
-                                        <FormControl>
-                                            <Textarea
-                                                {...field}
-                                                rows={6}
-                                                className="font-mono text-sm"
-                                                dir="ltr"
-                                            />
-                                        </FormControl>
-                                        <FormDescription>
-                                            مشخص کنید کدام فیلدها در خروجی الستیک شامل آدرس فایل و نام باکت هستند.
-                                        </FormDescription>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
+                            <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+                                <div>
+                                    <h4 className="font-medium text-sm">تنظیمات نگاشت Object Storage</h4>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        مشخص کنید کدام فیلد از خروجی Elasticsearch شامل مسیر فایل است.
+                                        باکت پیش‌فرض از تنظیمات Object Storage خوانده می‌شود.
+                                    </p>
+                                </div>
+                                <FormField
+                                    control={form.control}
+                                    name="object_storage_mapping_str"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>مسیر فیلد مسیر فایل (dot notation)</FormLabel>
+                                            <FormControl>
+                                                <Input
+                                                    className="font-mono text-sm text-left"
+                                                    dir="ltr"
+                                                    placeholder="مثال: _source.image_path یا doc.photo"
+                                                    value={(() => {
+                                                        try {
+                                                            const parsed = JSON.parse(field.value || '{}');
+                                                            return (parsed.file_paths || [''])[0] || '';
+                                                        } catch { return ''; }
+                                                    })()}
+                                                    onChange={(e) => {
+                                                        try {
+                                                            const current = JSON.parse(field.value || '{}');
+                                                            current.file_paths = e.target.value ? [e.target.value] : [];
+                                                            field.onChange(JSON.stringify(current, null, 2));
+                                                        } catch {
+                                                            field.onChange(JSON.stringify({ file_paths: [e.target.value], bucket: '', base_prefix: '' }, null, 2));
+                                                        }
+                                                    }}
+                                                />
+                                            </FormControl>
+                                            <FormDescription>
+                                                نام فیلد در نتیجه ES که شامل آدرس فایل/عکس است.
+                                            </FormDescription>
+
+                                            <div className="mt-3">
+                                                <FormLabel>باکت اختصاصی (اختیاری)</FormLabel>
+                                                <Input
+                                                    className="font-mono text-sm text-left mt-1"
+                                                    dir="ltr"
+                                                    placeholder="خالی = از باکت پیش‌فرض تنظیمات Object Storage استفاده می‌شود"
+                                                    value={(() => {
+                                                        try {
+                                                            const parsed = JSON.parse(field.value || '{}');
+                                                            return parsed.bucket || '';
+                                                        } catch { return ''; }
+                                                    })()}
+                                                    onChange={(e) => {
+                                                        try {
+                                                            const current = JSON.parse(field.value || '{}');
+                                                            current.bucket = e.target.value;
+                                                            field.onChange(JSON.stringify(current, null, 2));
+                                                        } catch {
+                                                            field.onChange(JSON.stringify({ file_paths: [], bucket: e.target.value, base_prefix: '' }, null, 2));
+                                                        }
+                                                    }}
+                                                />
+                                                <p className="text-xs text-muted-foreground mt-1">
+                                                    اگر فایل‌ها در باکت متفاوتی هستند، نام آن باکت را اینجا وارد کنید.
+                                                </p>
+                                            </div>
+
+                                            <details className="mt-3">
+                                                <summary className="text-xs text-muted-foreground cursor-pointer">مشاهده JSON خام</summary>
+                                                <Textarea
+                                                    value={field.value || ''}
+                                                    onChange={field.onChange}
+                                                    rows={4}
+                                                    className="font-mono text-xs mt-1"
+                                                    dir="ltr"
+                                                />
+                                            </details>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
                         )}
 
                         <div className="space-y-4 pt-4 border-t">
