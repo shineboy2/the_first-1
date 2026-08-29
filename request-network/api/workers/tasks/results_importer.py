@@ -79,66 +79,68 @@ def import_results_from_response_network(self):
             
             for result_data in results_data:
                 try:
-                    request_id = result_data.get("request_id")
-                    
-                    # Find request
-                    request = db.query(RequestModel).filter(
-                        RequestModel.id == request_id
-                    ).first()
+                    with db.begin_nested():
+                        request_id = result_data.get("request_id")
+                        
+                        # Find request
+                        request = db.query(RequestModel).filter(
+                            RequestModel.id == request_id
+                        ).first()
 
-                    if request:
-                        # Check if already completed to avoid overwrites
-                        if request.status in [RequestState.COMPLETED.value, RequestState.FAILED.value]:
-                            continue
+                        if request:
+                            # Check if already completed to avoid overwrites
+                            if request.status in [RequestState.COMPLETED.value, RequestState.FAILED.value]:
+                                continue
+                                
+                            # Double check response doesn't already exist
+                            existing_resp = db.query(Response).filter(Response.request_id == request.id).first()
+                            if existing_resp:
+                                continue
+
+                            # Create Response object
+                            response_data = result_data.get("result_data", {})
                             
-                        # Double check response doesn't already exist
-                        existing_resp = db.query(Response).filter(Response.request_id == request.id).first()
-                        if existing_resp:
-                            continue
+                            # Check has_error from the result_data (exported from response-network)
+                            has_error = result_data.get("has_error", False)
+                            
+                            # Also check if there's an error in the response_data itself
+                            if not has_error and "error" in response_data:
+                                has_error = True
+                            
+                            error_message = response_data.get("error") if has_error else None
+                            
+                            response_obj = Response(
+                                request_id=request.id,
+                                result_data=response_data,
+                                result_count=response_data.get("count", 0),
+                                execution_time_ms=result_data.get("took", 0),
+                                received_at=datetime.utcnow(),
+                                has_error=has_error,
+                                error_message=error_message
+                            )
+                            db.add(response_obj)
 
-                        # Create Response object
-                        response_data = result_data.get("result_data", {})
+                            # Update request status based on has_error
+                            if has_error:
+                                request.status = RequestState.FAILED.value
+                            else:
+                                request.status = RequestState.COMPLETED.value
+                            request.result_received_at = datetime.utcnow()
+                            
+                            # Invalidate cache for this request (async logic omitted/preserved)
+                            try:
+                                from db.redis_client import RedisClient
+                                redis = RedisClient(settings.REDIS_URL)
+                                # Use sync wrapper or loop if needed
+                                # for simplicity in sync worker:
+                                # asyncio.run(redis.invalidate_response(str(request_id)))
+                            except Exception:
+                                pass
+                            
+                            imported_count = 1
+                            total_imported += imported_count
                         
-                        # Check has_error from the result_data (exported from response-network)
-                        has_error = result_data.get("has_error", False)
-                        
-                        # Also check if there's an error in the response_data itself
-                        if not has_error and "error" in response_data:
-                            has_error = True
-                        
-                        error_message = response_data.get("error") if has_error else None
-                        
-                        response_obj = Response(
-                            request_id=request.id,
-                            result_data=response_data,
-                            result_count=response_data.get("count", 0),
-                            execution_time_ms=result_data.get("took", 0),
-                            received_at=datetime.utcnow(),
-                            has_error=has_error,
-                            error_message=error_message
-                        )
-                        db.add(response_obj)
-
-                        # Update request status based on has_error
-                        if has_error:
-                            request.status = RequestState.FAILED.value
-                        else:
-                            request.status = RequestState.COMPLETED.value
-                        request.result_received_at = datetime.utcnow()
-                        
-                        # Invalidate cache for this request (async logic omitted/preserved)
-                        try:
-                            from db.redis_client import RedisClient
-                            redis = RedisClient(settings.REDIS_URL)
-                            # Use sync wrapper or loop if needed
-                            # for simplicity in sync worker:
-                            # asyncio.run(redis.invalidate_response(str(request_id)))
-                        except Exception:
-                            pass
-                        
-                        imported_count = 1
-                        total_imported += imported_count
-
+                        db.flush()
                 except Exception as e:
                     logger.error(f"Error processing result item: {e}")
                     continue

@@ -67,6 +67,11 @@ async def force_create_user(
     db: AsyncSession = Depends(get_db),
     current_user: UserModel = Depends(get_current_admin_user)
 ):
+    if getattr(user_in, "profile_type", None) == "admin" or getattr(user_in, "role", None) == "admin":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot create a new admin user. Only one admin is allowed."
+        )
     user = await user_service.create_user(db, user_in)
     await create_audit_log(db, "USER_CREATED", request, user_id=current_user.id, resource_type="User", resource_id=str(user.id), meta={"username": user.username, "role": user.profile_type, "force": True})
     return user
@@ -423,19 +428,6 @@ async def reset_user_password(
             "task_id": sync_task_id,
             "message": "Password change is being synced to Request Network"
         }
-    }
-    
-    # Update password
-    user.hashed_password = get_password_hash(request_body["new_password"])
-    db.add(user)
-    await db.commit()
-    
-    return {
-        "success": True,
-        "message": f"Password reset for user {user.username}",
-        "username": user.username,
-        "temporary": True,
-        "note": "User should change password on next login"
     }
 
 

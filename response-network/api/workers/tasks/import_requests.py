@@ -76,51 +76,54 @@ def import_requests_from_request_network(self):
 
             for req_data in requests_data:
                 try:
-                    request_id = req_data.get("id")
-                    
-                    # Check if request already exists (by original_request_id)
-                    existing = db.query(RequestModel).filter(
-                        RequestModel.original_request_id == request_id
-                    ).first()
+                    with db.begin_nested():
+                        request_id = req_data.get("id")
+                        
+                        # Check if request already exists (by original_request_id)
+                        existing = db.query(RequestModel).filter(
+                            RequestModel.original_request_id == request_id
+                        ).first()
 
-                    if not existing:
-                        # Resolve User ID
-                        local_user_id = req_data.get("user_id")
-                        username = req_data.get("username")
-                        
-                        if username and username != "unknown":
-                            user = db.query(User).filter(User.username == username).first()
-                            if user:
-                                local_user_id = user.id
-                            else:
-                                # User not found by username. 
-                                # Could try to create or log error. For now, integrity error will occur if we use wrong ID.
-                                # If it's a new user that hasn't synced, we might need to skip or fail.
-                                pass
-                        
-                        # Create new request
-                        new_request = RequestModel(
-                            original_request_id=request_id,
-                            user_id=local_user_id,
-                            query_type=req_data.get("query_type"),
-                            query_params=req_data.get("query_params", {}),
-                            priority=req_data.get("priority", 5),
-                            status=RequestState.PENDING.value,
-                            import_batch_id=uuid.UUID(req_data.get("batch_id")) if req_data.get("batch_id") else None
-                        )
-                        db.add(new_request)
-                        total_imported += 1
-                    else:
-                        if existing.status in [RequestState.FAILED.value, RequestState.ERROR.value]:
-                            existing.status = RequestState.PENDING.value
-                            existing.retry_count = existing.retry_count + 1
-                            if hasattr(existing, 'worker_id'):
-                                existing.worker_id = None
-                            if hasattr(existing, 'lease_until'):
-                                existing.lease_until = None
+                        if not existing:
+                            # Resolve User ID
+                            local_user_id = req_data.get("user_id")
+                            username = req_data.get("username")
+                            
+                            if username and username != "unknown":
+                                user = db.query(User).filter(User.username == username).first()
+                                if user:
+                                    local_user_id = user.id
+                                else:
+                                    # User not found by username. 
+                                    # Could try to create or log error. For now, integrity error will occur if we use wrong ID.
+                                    # If it's a new user that hasn't synced, we might need to skip or fail.
+                                    pass
+                            
+                            # Create new request
+                            new_request = RequestModel(
+                                original_request_id=request_id,
+                                user_id=local_user_id,
+                                query_type=req_data.get("query_type"),
+                                query_params=req_data.get("query_params", {}),
+                                priority=req_data.get("priority", 5),
+                                status=RequestState.PENDING.value,
+                                import_batch_id=uuid.UUID(req_data.get("batch_id")) if req_data.get("batch_id") else None
+                            )
+                            db.add(new_request)
                             total_imported += 1
                         else:
-                            total_duplicates += 1
+                            if existing.status in [RequestState.FAILED.value, RequestState.ERROR.value]:
+                                existing.status = RequestState.PENDING.value
+                                existing.retry_count = existing.retry_count + 1
+                                if hasattr(existing, 'worker_id'):
+                                    existing.worker_id = None
+                                if hasattr(existing, 'lease_until'):
+                                    existing.lease_until = None
+                                total_imported += 1
+                            else:
+                                total_duplicates += 1
+                        
+                        db.flush()
                 except Exception as e:
                     # Log individual item error but continue
                     sync_logger.error(f"Error importing request item {req_data.get('id')}: {e}")
