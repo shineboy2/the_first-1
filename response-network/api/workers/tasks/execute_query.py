@@ -1,6 +1,7 @@
 import json
 from datetime import datetime
 import uuid
+from typing import Optional
 from time import sleep
 import base64
 import logging
@@ -14,7 +15,25 @@ from models.incoming_request import IncomingRequest
 from models.request_type import RequestType
 from models.query_result import QueryResult
 from models.elasticsearch_config import ElasticsearchConfig
+from models.constants import RequestState
 # External API handler is now loaded dynamically via HandlerRegistry
+
+def classify_error(e: Exception) -> str:
+    """Classify exception as 'permanent' or 'transient'."""
+    if isinstance(e, (ValueError, KeyError, TypeError, NotImplementedError)):
+        return "permanent"
+    
+    error_str = str(e).lower()
+    
+    # HTTP Client Errors (4xx) except 429 Too Many Requests
+    if any(code in error_str for code in ["400", "401", "403", "404", "405", "422"]):
+        return "permanent"
+        
+    # Configuration / Logic errors
+    if "not found" in error_str or "not provided" in error_str:
+        return "permanent"
+        
+    return "transient"
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -33,42 +52,44 @@ def execute_pending_queries(self):
     """
     db = SessionLocal()
     try:
-        # First, check for stuck "processing" requests and reset them
-        # A request is considered stuck if it's been in "processing" for more than 5 minutes
         from datetime import timedelta
-        stuck_threshold = datetime.utcnow() - timedelta(minutes=5)
-        
-        stuck_requests = db.query(IncomingRequest).filter(
-            IncomingRequest.status == "processing",
-            IncomingRequest.started_at < stuck_threshold
-        ).all()
-        
-        for stuck_req in stuck_requests:
-            logger.warning(f"[EXECUTE_QUERY] Found stuck request {stuck_req.id} in processing state, resetting to pending")
-            stuck_req.status = "pending"
-            stuck_req.started_at = None
-            stuck_req.assigned_worker = None
-        
-        if stuck_requests:
-            db.commit()
-        
-        # Get pending requests
-        pending_requests = db.query(IncomingRequest).filter(
-            IncomingRequest.status == "pending"
-        ).limit(50).all()
+        from sqlalchemy import or_
 
+        now = datetime.utcnow()
+        
+        # 1. Atomic Claim using row-level locks (SKIP LOCKED)
+        # Find requests that are either PENDING, or PROCESSING but their lease has expired.
+        claim_query = db.query(IncomingRequest).filter(
+            or_(
+                IncomingRequest.status == RequestState.PENDING.value,
+                (IncomingRequest.status == RequestState.PROCESSING.value) & (IncomingRequest.lease_until < now)
+            )
+        ).with_for_update(skip_locked=True, of=IncomingRequest).limit(50)
+        
+        pending_requests = claim_query.all()
+        
         if not pending_requests:
             return {"status": "no_pending_requests"}
+
+        # 2. Mark them as leased
+        worker_uuid = self.request.id or str(uuid.uuid4())
+        for req in pending_requests:
+            # If it was stuck, log it
+            if req.status == RequestState.PROCESSING.value:
+                logger.warning(f"[EXECUTE_QUERY] Re-claiming stuck request {req.id}")
+                
+            req.status = RequestState.PROCESSING.value
+            req.started_at = now
+            req.worker_id = worker_uuid
+            req.assigned_worker = worker_uuid
+            req.lease_until = now + timedelta(minutes=5)
+            
+        db.commit()
 
         processed_count = 0
         for req in pending_requests:
             req_id = req.id  # Store ID separately to avoid state issues
             try:
-                # Update status to processing
-                req.status = "processing"
-                req.started_at = datetime.utcnow()
-                req.assigned_worker = self.request.id
-                db.commit()
 
                 # Check if it is a file-based request
                 # Look up the RequestType to check execution_method
@@ -143,6 +164,7 @@ def execute_pending_queries(self):
                         existing_result.elasticsearch_took_ms = 0
                         existing_result.executed_at = end_time
                         existing_result.cache_hit = False
+                        existing_result.exported_at = None
                     else:
                         # Create new QueryResult
                         query_result = QueryResult(
@@ -159,7 +181,7 @@ def execute_pending_queries(self):
                         db.add(query_result)
 
                     # Update Request Status
-                    req.status = "completed"
+                    req.status = RequestState.COMPLETED.value
                     req.completed_at = end_time
                     req.progress = 100.0
                     req.has_error = False
@@ -288,7 +310,9 @@ def execute_pending_queries(self):
 
                     grouped = defaultdict(list)
                     for h in enriched_hits:
-                        source = h.get("_source", {})
+                        source = h.get("_source")
+                        if source is None:
+                            source = h.get("fields", {})
                         if field_map:
                             mapped_source = {}
                             for key, value in source.items():
@@ -319,6 +343,7 @@ def execute_pending_queries(self):
                         existing_result.elasticsearch_took_ms = es_took
                         existing_result.executed_at = end_time
                         existing_result.cache_hit = False
+                        existing_result.exported_at = None
                     else:
                         query_result = QueryResult(
                             id=uuid.uuid4(),
@@ -333,7 +358,7 @@ def execute_pending_queries(self):
                         )
                         db.add(query_result)
 
-                    req.status = "completed"
+                    req.status = RequestState.COMPLETED.value
                     req.completed_at = end_time
                     req.progress = 100.0
                     req.has_error = False
@@ -534,6 +559,7 @@ def execute_pending_queries(self):
                     existing_result.elasticsearch_took_ms = es_result.get("took", 0)
                     existing_result.executed_at = datetime.utcnow()
                     existing_result.cache_hit = False
+                    existing_result.exported_at = None
                 else:
                     # Create new QueryResult
                     query_result = QueryResult(
@@ -550,7 +576,7 @@ def execute_pending_queries(self):
                     db.add(query_result)
 
                 # Update Request Status
-                req.status = "completed"
+                req.status = RequestState.COMPLETED.value
                 req.completed_at = datetime.utcnow()
                 req.progress = 100.0
                 req.has_error = False
@@ -575,6 +601,7 @@ def execute_pending_queries(self):
                         existing_result.execution_time_ms = 0
                         existing_result.elasticsearch_took_ms = 0
                         existing_result.executed_at = datetime.utcnow()
+                        existing_result.exported_at = None
                         logger.info(f"[EXECUTE_QUERY] Updated existing QueryResult for request {req_id}")
                     else:
                         # Create new QueryResult with error
@@ -591,24 +618,31 @@ def execute_pending_queries(self):
                         )
                         db.add(error_result)
                     
-                    # Increment retry count
-                    fresh_req.retry_count += 1
-                    fresh_req.error_message = str(e)
+                    # Increment attempt count
+                    fresh_req.attempt_count += 1
+                    fresh_req.last_error = str(e)
                     fresh_req.has_error = True
+                    
+                    error_category = classify_error(e)
                     
                     # Check if we should auto-retry or mark as failed
                     max_retries = 3  # Same as Celery max_retries
-                    if fresh_req.retry_count < max_retries:
+                    if error_category == "transient" and fresh_req.attempt_count < max_retries:
                         # Auto-retry: set status back to pending
-                        fresh_req.status = "pending"
+                        fresh_req.status = RequestState.PENDING.value
                         fresh_req.started_at = None  # Reset started time
                         fresh_req.assigned_worker = None  # Reset worker assignment
-                        logger.info(f"[EXECUTE_QUERY] Request {req_id} will be retried (attempt {fresh_req.retry_count}/{max_retries})")
+                        fresh_req.worker_id = None
+                        fresh_req.lease_until = None
+                        logger.info(f"[EXECUTE_QUERY] Request {req_id} will be retried (attempt {fresh_req.attempt_count}/{max_retries}) - Error: {error_category}")
                     else:
-                        # Max retries exceeded: mark as failed
-                        fresh_req.status = "failed"
+                        # Max retries exceeded or permanent error: mark as failed
+                        fresh_req.status = RequestState.FAILED.value
                         fresh_req.completed_at = datetime.utcnow()
-                        logger.error(f"[EXECUTE_QUERY] Request {req_id} exceeded max retries ({max_retries}), marked as failed")
+                        if error_category == "permanent":
+                            logger.error(f"[EXECUTE_QUERY] Request {req_id} failed permanently (No retry). Error: {e}")
+                        else:
+                            logger.error(f"[EXECUTE_QUERY] Request {req_id} exceeded max retries ({max_retries}), marked as failed")
                     
                     db.commit()
                     processed_count += 1

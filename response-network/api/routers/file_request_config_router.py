@@ -6,7 +6,7 @@ import json
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.dependencies import get_db
@@ -23,12 +23,14 @@ from schemas.file_request_config import (
 )
 import crud.file_request_configs as crud_frc
 import crud.ftp_profiles as crud_ftp
+from services.audit_service import create_audit_log
 
 router = APIRouter(prefix="/file-request-configs", tags=["File Request Configs"])
 
 
 @router.post("/", response_model=FileRequestConfigRead, status_code=status.HTTP_201_CREATED)
 async def create_file_request_config(
+    request: Request,
     config_in: FileRequestConfigCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
@@ -56,7 +58,9 @@ async def create_file_request_config(
             detail="Receive FTP profile not found",
         )
 
-    return await crud_frc.create_file_request_config(db, config_in)
+    created = await crud_frc.create_file_request_config(db, config_in)
+    await create_audit_log(db, "FILE_REQUEST_CONFIG_CREATED", request, user_id=current_user.id, resource_type="FileRequestConfig", resource_id=str(created.id), meta={"name": created.name})
+    return created
 
 
 @router.get("/", response_model=List[FileRequestConfigRead])
@@ -91,6 +95,7 @@ async def get_file_request_config(
 
 @router.patch("/{config_id}", response_model=FileRequestConfigRead)
 async def update_file_request_config(
+    request: Request,
     config_id: UUID,
     config_in: FileRequestConfigUpdate,
     db: AsyncSession = Depends(get_db),
@@ -128,11 +133,15 @@ async def update_file_request_config(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="File request config not found",
         )
+    
+    await create_audit_log(db, "FILE_REQUEST_CONFIG_UPDATED", request, user_id=current_user.id, resource_type="FileRequestConfig", resource_id=str(updated.id), meta=config_in.dict(exclude_unset=True))
+    
     return updated
 
 
 @router.delete("/{config_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_file_request_config(
+    request: Request,
     config_id: UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
@@ -144,6 +153,9 @@ async def delete_file_request_config(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="File request config not found",
         )
+    
+    await create_audit_log(db, "FILE_REQUEST_CONFIG_DELETED", request, user_id=current_user.id, resource_type="FileRequestConfig", resource_id=str(config_id))
+    
     return None
 
 

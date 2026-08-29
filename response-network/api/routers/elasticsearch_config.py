@@ -1,12 +1,10 @@
 """Elasticsearch configuration router module."""
 import logging
-from typing import Annotated
-
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
-from db.session import get_db_session
+from core.dependencies import get_db
 from auth.dependencies import get_current_admin_user
 from models.user import User
 from models.elasticsearch_config import ElasticsearchConfig
@@ -17,6 +15,7 @@ from schemas.elasticsearch_config import (
     ElasticsearchConfigUpdate
 )
 from services.elasticsearch_config import ElasticsearchConfigService
+from services.audit_service import create_audit_log
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +27,8 @@ router = APIRouter(
 
 @router.get("/config/active", response_model=ElasticsearchConfigRead)
 async def get_active_elasticsearch_config(
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    current_user: Annotated[User, Depends(get_current_admin_user)],
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
 ):
     """Get the currently active Elasticsearch configuration."""
     service = ElasticsearchConfigService(db)
@@ -48,8 +47,8 @@ async def get_active_elasticsearch_config(
 async def list_elasticsearch_configs(
     skip: int = 0,
     limit: int = 100,
-    db: Annotated[AsyncSession, Depends(get_db_session)] = None,
-    current_user: Annotated[User, Depends(get_current_admin_user)] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
 ):
     """List all Elasticsearch configurations."""
     service = ElasticsearchConfigService(db)
@@ -60,8 +59,8 @@ async def list_elasticsearch_configs(
 @router.get("/config/{config_id}", response_model=ElasticsearchConfigRead)
 async def get_elasticsearch_config(
     config_id: str,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    current_user: Annotated[User, Depends(get_current_admin_user)],
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
 ):
     """Get a specific Elasticsearch configuration by ID."""
     service = ElasticsearchConfigService(db)
@@ -78,9 +77,10 @@ async def get_elasticsearch_config(
 
 @router.post("/config", response_model=ElasticsearchConfigRead, status_code=status.HTTP_201_CREATED)
 async def create_elasticsearch_config(
+    request: Request,
     data: ElasticsearchConfigCreate,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    current_user: Annotated[User, Depends(get_current_admin_user)],
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
 ):
     """Create a new Elasticsearch configuration."""
     service = ElasticsearchConfigService(db)
@@ -98,15 +98,18 @@ async def create_elasticsearch_config(
     config = await service.create_config(data)
     logger.info(f"Created Elasticsearch configuration: {config.id}")
     
+    await create_audit_log(db, "ES_CONFIG_CREATED", request, user_id=current_user.id, resource_type="ElasticsearchConfig", resource_id=str(config.id), meta={"url": config.url})
+    
     return config.to_read()
 
 
 @router.put("/config/{config_id}", response_model=ElasticsearchConfigRead)
 async def update_elasticsearch_config(
+    request: Request,
     config_id: str,
     data: ElasticsearchConfigUpdate,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    current_user: Annotated[User, Depends(get_current_admin_user)],
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
 ):
     """Update an Elasticsearch configuration."""
     service = ElasticsearchConfigService(db)
@@ -139,14 +142,17 @@ async def update_elasticsearch_config(
     updated_config = await service.update_config(config_id, data)
     logger.info(f"Updated Elasticsearch configuration: {config_id}")
     
+    await create_audit_log(db, "ES_CONFIG_UPDATED", request, user_id=current_user.id, resource_type="ElasticsearchConfig", resource_id=config_id, meta=data.dict(exclude_unset=True))
+    
     return updated_config.to_read()
 
 
 @router.delete("/config/{config_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_elasticsearch_config(
+    request: Request,
     config_id: str,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    current_user: Annotated[User, Depends(get_current_admin_user)],
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
 ):
     """Delete an Elasticsearch configuration."""
     service = ElasticsearchConfigService(db)
@@ -166,13 +172,15 @@ async def delete_elasticsearch_config(
     
     await service.delete_config(config_id)
     logger.info(f"Deleted Elasticsearch configuration: {config_id}")
+    
+    await create_audit_log(db, "ES_CONFIG_DELETED", request, user_id=current_user.id, resource_type="ElasticsearchConfig", resource_id=config_id, meta={"url": config.url})
 
 
 @router.post("/config/{config_id}/test", response_model=dict)
 async def test_elasticsearch_config(
     config_id: str,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    current_user: Annotated[User, Depends(get_current_admin_user)],
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
 ):
     """Test connection to Elasticsearch with a specific configuration."""
     service = ElasticsearchConfigService(db)
@@ -196,8 +204,8 @@ async def test_elasticsearch_config(
 @router.post("/config/test-new", response_model=dict)
 async def test_new_elasticsearch_config(
     data: ElasticsearchConfigCreate,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    current_user: Annotated[User, Depends(get_current_admin_user)],
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
 ):
     """Test connection with a new (not yet created) Elasticsearch configuration."""
     service = ElasticsearchConfigService(db)

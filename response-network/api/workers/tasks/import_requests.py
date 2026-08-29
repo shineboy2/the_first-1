@@ -14,6 +14,7 @@ from core.config import settings
 from core.dependencies import get_db_sync
 from models.incoming_request import IncomingRequest as RequestModel
 from core.sync_logger import sync_logger
+from models.constants import RequestState
 
 IMPORT_PATH = Path(settings.IMPORT_DIR) / "requests"
 
@@ -38,16 +39,17 @@ def import_requests_from_request_network(self):
         try:
             from services.import_storage import ImportStorageService
             
-            # Read latest requests file (abstracted Local/FTP)
-            # Returns a list of dicts for "requests" resource type
-            requests_data = ImportStorageService.read_latest_file(db, "requests")
+            # Read oldest unprocessed requests file (abstracted Local/FTP)
+            file_info = ImportStorageService.get_next_unprocessed_file(db, "requests")
             
-            if not requests_data:
+            if not file_info or not file_info[0]:
                 return {
                     "status": "no_files",
                     "imported_at": datetime.utcnow().isoformat(),
                     "total_requests": 0
                 }
+
+            requests_data, filename = file_info
 
             total_imported = 0
             total_duplicates = 0
@@ -87,19 +89,35 @@ def import_requests_from_request_network(self):
                             query_type=req_data.get("query_type"),
                             query_params=req_data.get("query_params", {}),
                             priority=req_data.get("priority", 5),
-                            status="pending",
+                            status=RequestState.PENDING.value,
                             import_batch_id=uuid.UUID(req_data.get("batch_id")) if req_data.get("batch_id") else None
                         )
                         db.add(new_request)
                         total_imported += 1
                     else:
-                        total_duplicates += 1
+                        if existing.status in [RequestState.FAILED.value, RequestState.ERROR.value]:
+                            existing.status = RequestState.PENDING.value
+                            existing.retry_count = existing.retry_count + 1
+                            if hasattr(existing, 'worker_id'):
+                                existing.worker_id = None
+                            if hasattr(existing, 'lease_until'):
+                                existing.lease_until = None
+                            total_imported += 1
+                        else:
+                            total_duplicates += 1
                 except Exception as e:
                     # Log individual item error but continue
                     sync_logger.error(f"Error importing request item {req_data.get('id')}: {e}")
                     continue
 
             db.commit()
+            
+            # Archive the file now that processing is complete
+            if filename:
+                try:
+                    ImportStorageService.archive_file(db, "requests", filename)
+                except Exception as e:
+                    sync_logger.error(f"Failed to archive requests file {filename}: {e}")
 
             return {
                 "status": "success",

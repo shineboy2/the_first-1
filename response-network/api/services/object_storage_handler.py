@@ -188,6 +188,27 @@ class ObjectStorageHandler:
 
         return results
 
+    def _resolve_path(self, hit: dict, path_str: str) -> Any:
+        parts = path_str.split(".")
+        
+        # Determine root: either the hit itself, _source, or fields
+        if parts[0] == "_source" or parts[0] == "fields":
+            current = hit
+        else:
+            # Fallback check: first _source, then fields
+            current = hit.get("_source")
+            if current is None:
+                current = hit.get("fields", {})
+            
+        for part in parts:
+            if isinstance(current, dict):
+                current = current.get(part)
+            else:
+                return None
+            if current is None:
+                return None
+        return current
+
     def enrich_es_hits_with_objects(
         self,
         hits: List[dict],
@@ -227,11 +248,10 @@ class ObjectStorageHandler:
         # Collect all object keys to download
         download_tasks = []  # [(hit_index, field_name, object_key, bucket)]
         for idx, hit in enumerate(hits):
-            source = hit.get("_source", {})
-            hit_bucket = source.get(bucket_field) if bucket_field else None
+            hit_bucket = self._resolve_path(hit, bucket_field) if bucket_field else None
 
             for field in file_paths_fields:
-                raw_path = source.get(field)
+                raw_path = self._resolve_path(hit, field)
                 if not raw_path:
                     continue
 
@@ -277,17 +297,29 @@ class ObjectStorageHandler:
 
         for idx, field, object_key, _ in download_tasks:
             result = download_results.get(object_key, {})
-            source = hits[idx].get("_source", {})
+            # Inject into _source if it exists, otherwise into fields, or create _source
+            if "_source" in hits[idx]:
+                target = hits[idx]["_source"]
+            elif "fields" in hits[idx]:
+                target = hits[idx]["fields"]
+            else:
+                hits[idx]["_source"] = {}
+                target = hits[idx]["_source"]
 
             if result.get("success"):
-                source[f"{field}_base64"] = result["data"]
-                source[f"{field}_content_type"] = result["content_type"]
-                source[f"{field}_size_bytes"] = result["size_bytes"]
+                target[f"{field}_base64"] = result["data"]
+                target[f"{field}_content_type"] = result["content_type"]
+                target[f"{field}_size_bytes"] = result["size_bytes"]
+                
+                # Remove the original file path to save bandwidth
+                if field in target:
+                    del target[field]
+                    
                 stats["total_files_downloaded"] += 1
                 stats["total_size_bytes"] += result["size_bytes"]
             else:
-                source[f"{field}_base64"] = None
-                source[f"{field}_error"] = result.get("error", "Download failed")
+                target[f"{field}_base64"] = None
+                target[f"{field}_error"] = result.get("error", "Download failed")
                 stats["failed_downloads"] += 1
 
         return {

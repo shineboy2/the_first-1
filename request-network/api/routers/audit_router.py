@@ -25,7 +25,7 @@ async def list_audit_logs(
     List audit logs present in the local database.
     Note: In Request Network, this only contains recent unsynced logs or logs waiting for ACK.
     """
-    query = select(AuditLog).order_by(desc(AuditLog.created_at))
+    query = select(AuditLog, User.username).outerjoin(User, AuditLog.user_id == User.id).order_by(desc(AuditLog.created_at))
     
     if user_id:
         query = query.filter(AuditLog.user_id == user_id)
@@ -36,7 +36,15 @@ async def list_audit_logs(
         
     query = query.offset(skip).limit(limit)
     result = await db.execute(query)
-    logs = result.scalars().all()
+    rows = result.all()
+    
+    logs = []
+    for log, username in rows:
+        log_dict = {c.name: getattr(log, c.name) for c in log.__table__.columns}
+        if log_dict.get('user_id'):
+            log_dict['user_id'] = str(log_dict['user_id'])
+        log_dict["username"] = username
+        logs.append(log_dict)
     
     # Count total
     count_query = select(AuditLog)

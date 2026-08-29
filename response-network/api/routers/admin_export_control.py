@@ -2,13 +2,14 @@
 Admin Export Control Router - Control what data gets exported to Request Network
 """
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.dependencies import get_current_admin_user
 from db.session import get_db_session
 from models.user import User as UserModel
 from schemas.export_config import ExportConfigUpdate, ExportConfigResponse
+from services.audit_service import create_audit_log
 
 router = APIRouter(prefix="/api/v1/admin/exports", tags=["admin-exports"])
 
@@ -48,6 +49,7 @@ async def get_export_config(
 
 @router.post("/config", response_model=ExportConfigResponse)
 async def update_export_config(
+    request: Request,
     config: ExportConfigUpdate,
     current_user: UserModel = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db_session)
@@ -84,7 +86,7 @@ async def update_export_config(
     # Note: Currently these settings are read from environment variables
     # In future, we could store them in database for runtime updates
     
-    return ExportConfigResponse(
+    response = ExportConfigResponse(
         request_types_export_enabled=config.request_types_export_enabled,
         request_types_filter_by_is_active=config.request_types_filter_by_is_active,
         users_export_enabled=config.users_export_enabled,
@@ -103,10 +105,15 @@ async def update_export_config(
         ftp_use_tls=config.ftp_use_tls if config.ftp_use_tls is not None else app_settings.EXPORT_FTP_USE_TLS,
         message="✅ Export configuration updated. Note: Destination settings require environment variable updates or database storage (future feature)."
     )
+    
+    await create_audit_log(db, "EXPORT_CONFIG_UPDATED", request, user_id=current_user.id, resource_type="ExportConfig", meta=config.dict(exclude_unset=True))
+    
+    return response
 
 
 @router.post("/test")
 async def test_exports(
+    request: Request,
     current_user: UserModel = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db_session)
 ):
@@ -129,7 +136,7 @@ async def test_exports(
         )
         result = job.apply_async()
         
-        return {
+        response = {
             "status": "queued",
             "message": "All export tasks have been queued for immediate execution",
             "task_id": result.id,
@@ -139,6 +146,10 @@ async def test_exports(
                 "results": "export_completed_results"
             }
         }
+        
+        await create_audit_log(db, "EXPORT_TEST_TRIGGERED", request, user_id=current_user.id, resource_type="ExportConfig", meta={"task_id": result.id})
+        
+        return response
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

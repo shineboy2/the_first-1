@@ -169,7 +169,7 @@ def send_file_request(self, file_request_id: str):
                 ).first()
                 if incoming_req:
                     incoming_req.status = "failed"
-                    incoming_req.error_message = f"File request send failed: {str(e)[:300]}"
+                    incoming_req.last_error = f"File request send failed: {str(e)[:300]}"
                     incoming_req.has_error = True
 
                 db.commit()

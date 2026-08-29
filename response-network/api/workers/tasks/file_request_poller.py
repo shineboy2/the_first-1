@@ -252,7 +252,7 @@ def poll_file_responses(self):
                             if incoming_req:
                                 incoming_req.status = "failed"
                                 incoming_req.completed_at = datetime.utcnow()
-                                incoming_req.error_message = (
+                                incoming_req.last_error = (
                                     f"File response parse error: {error_msg[:300]}"
                                 )
                                 incoming_req.has_error = True
@@ -288,7 +288,7 @@ def poll_file_responses(self):
                             if incoming_req:
                                 incoming_req.status = "failed"
                                 incoming_req.completed_at = datetime.utcnow()
-                                incoming_req.error_message = "File request response timeout"
+                                incoming_req.last_error = "File request response timeout"
                                 incoming_req.has_error = True
 
             db.commit()

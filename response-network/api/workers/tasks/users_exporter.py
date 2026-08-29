@@ -189,11 +189,13 @@ def export_users_to_request_network():
                  export_path.mkdir(parents=True, exist_ok=True)
             
             latest_file = export_path / filename
+            tmp_latest_file = export_path / f"{filename}.tmp"
             json_str = json.dumps(export_data, indent=2, ensure_ascii=False)
             encrypted_bytes = encrypt_data(json_str.encode('utf-8'))
             
-            with open(latest_file, 'wb') as f:
+            with open(tmp_latest_file, 'wb') as f:
                 f.write(encrypted_bytes)
+            tmp_latest_file.rename(latest_file)
             
             logger.info(f"Exported users locally to {latest_file}")
             
@@ -256,7 +258,17 @@ def export_users_to_request_network():
                         logger.warning(f"Failed to create directory {remote_path}: {e}")
                         # Fallback to root if fails? No, keep raising or let it fail.
                 
-                ftp.storbinary(f"STOR {filename}", bio)
+                # Upload files (2-stage)
+                tmp_filename = f"{filename}.tmp"
+                ftp.storbinary(f"STOR {tmp_filename}", bio)
+                
+                # Rename to final name
+                try:
+                    ftp.delete(filename)
+                except:
+                    pass
+                ftp.rename(tmp_filename, filename)
+                
                 ftp.quit()
                 
                 logger.info(f"Successfully uploaded {filename} to FTP server at {remote_path}")

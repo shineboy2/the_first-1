@@ -3,19 +3,20 @@ set -x
 
 REDIS_PASS="redis_secure_pass"
 
-# Inject fake captcha for Response Network into Redis
-docker exec sim-resp-redis redis-cli -a "$REDIS_PASS" SETEX captcha:11111111-1111-1111-1111-111111111111 300 12345 > /dev/null 2>&1
-
-# Login to Response Network
-RESP_LOGIN=$(curl -s -X POST http://localhost:8000/api/v1/auth/login \
+echo "Logging in to Response Network..."
+RESP_LOGIN=$(curl -s -X POST http://localhost:8000/api/v1/auth/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "username=admin&password=123456&captcha_id=11111111-1111-1111-1111-111111111111&captcha_solution=12345")
+  -d "username=admin&password=Admin@1234")
 RESP_TOKEN=$(echo $RESP_LOGIN | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
 
-echo "Response Network Token: $RESP_TOKEN"
+if [ -z "$RESP_TOKEN" ]; then
+  echo "Failed to get Response Network token!"
+  echo "Response was: $RESP_LOGIN"
+  exit 1
+fi
 
 # Clean up existing data to avoid conflicts
-docker exec sim-resp-db psql -U response_user -d response_db -c "DELETE FROM request_types; DELETE FROM file_request_configs; DELETE FROM ftp_profiles; DELETE FROM external_apis;"
+docker exec sim-resp-db psql -U response_user -d response_db -c "DELETE FROM request_type_parameters; DELETE FROM request_types; DELETE FROM file_request_configs; DELETE FROM ftp_profiles; DELETE FROM external_apis;"
 
 # 1. Create FTP Profile in Response Network
 echo "Creating FTP Profile in Response Network..."
@@ -25,10 +26,10 @@ FTP_PROFILE=$(curl -s -X POST http://localhost:8000/api/v1/ftp-profiles/ \
   -d '{
     "name": "sim-ftp-sync",
     "display_name": "sim-ftp-sync",
-    "host": "ftp-req",
+    "host": "ftp-resp",
     "port": 21,
-    "username": "ftp_user",
-    "password": "ftp_password",
+    "username": "ftpuser",
+    "password": "ftppass",
     "use_tls": false,
     "remote_path": "/",
     "is_active": true
@@ -79,6 +80,7 @@ REQ_TYPE_1=$(curl -s -X POST http://localhost:8000/api/v1/request-types/ \
   -H "Content-Type: application/json" \
   -d '{
     "name": "get_external_users",
+    "display_name": "Get External Users",
     "description": "Get users from external JSONPlaceholder API",
     "is_active": false,
     "execution_method": "external_api"
@@ -114,6 +116,7 @@ REQ_TYPE_2=$(curl -s -X POST http://localhost:8000/api/v1/request-types/ \
   -H "Content-Type: application/json" \
   -d '{
     "name": "local_database_search",
+    "display_name": "Local DB Search",
     "description": "Search in the local ElasticSearch database",
     "is_active": false,
     "execution_method": "elasticsearch"
@@ -153,5 +156,37 @@ echo "Triggering export to sync Request Types to Request Network..."
 curl -s -X POST http://localhost:8000/api/v1/settings/system/trigger_export \
   -H "Authorization: Bearer $RESP_TOKEN" \
   -H "Content-Type: application/json"
+
+echo "Logging in to Request Network..."
+REQ_TOKEN=$(curl -s -X POST http://localhost:8001/api/v1/auth/token \
+  -d "username=admin&password=Admin@1234" | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+
+echo "Configuring FTP Storage on Request Network..."
+curl -s -X POST http://localhost:8001/api/v1/admin/imports/config/request_export \
+  -H "Authorization: Bearer $REQ_TOKEN" -H "Content-Type: application/json" \
+  -d '{"storage_type": "ftp", "enabled": true, "ftp_host": "ftp-req", "ftp_port": 21, "ftp_user": "ftpuser", "ftp_password": "ftppass", "ftp_path": "/requests", "ftp_use_tls": false}'
+curl -s -X POST http://localhost:8001/api/v1/admin/imports/config/result_import \
+  -H "Authorization: Bearer $REQ_TOKEN" -H "Content-Type: application/json" \
+  -d '{"storage_type": "ftp", "enabled": true, "ftp_host": "ftp-req", "ftp_port": 21, "ftp_user": "ftpuser", "ftp_password": "ftppass", "ftp_path": "/results", "ftp_use_tls": false}'
+curl -s -X POST http://localhost:8001/api/v1/admin/imports/config/user_import \
+  -H "Authorization: Bearer $REQ_TOKEN" -H "Content-Type: application/json" \
+  -d '{"storage_type": "ftp", "enabled": true, "ftp_host": "ftp-req", "ftp_port": 21, "ftp_user": "ftpuser", "ftp_password": "ftppass", "ftp_path": "/users", "ftp_use_tls": false}'
+curl -s -X POST http://localhost:8001/api/v1/admin/imports/config/request_types_import \
+  -H "Authorization: Bearer $REQ_TOKEN" -H "Content-Type: application/json" \
+  -d '{"storage_type": "ftp", "enabled": true, "ftp_host": "ftp-req", "ftp_port": 21, "ftp_user": "ftpuser", "ftp_password": "ftppass", "ftp_path": "/request_types", "ftp_use_tls": false}'
+
+echo "Configuring FTP Storage on Response Network..."
+curl -s -X POST http://localhost:8000/api/v1/admin/exports/config/request_import \
+  -H "Authorization: Bearer $RESP_TOKEN" -H "Content-Type: application/json" \
+  -d '{"operation_type": "request_import", "destination_type": "ftp", "enabled": true, "ftp_profile_id": "'$FTP_PROFILE_ID'", "ftp_path": "/requests"}'
+curl -s -X POST http://localhost:8000/api/v1/admin/exports/config/result_export \
+  -H "Authorization: Bearer $RESP_TOKEN" -H "Content-Type: application/json" \
+  -d '{"operation_type": "result_export", "destination_type": "ftp", "enabled": true, "ftp_profile_id": "'$FTP_PROFILE_ID'", "ftp_path": "/results"}'
+curl -s -X POST http://localhost:8000/api/v1/admin/exports/config/user_export \
+  -H "Authorization: Bearer $RESP_TOKEN" -H "Content-Type: application/json" \
+  -d '{"operation_type": "user_export", "destination_type": "ftp", "enabled": true, "ftp_profile_id": "'$FTP_PROFILE_ID'", "ftp_path": "/users"}'
+curl -s -X POST http://localhost:8000/api/v1/admin/exports/config/request_types_export \
+  -H "Authorization: Bearer $RESP_TOKEN" -H "Content-Type: application/json" \
+  -d '{"operation_type": "request_types_export", "destination_type": "ftp", "enabled": true, "ftp_profile_id": "'$FTP_PROFILE_ID'", "ftp_path": "/request_types"}'
 
 echo "Done!"

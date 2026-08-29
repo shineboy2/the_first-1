@@ -16,6 +16,7 @@ from core.dependencies import get_db_sync
 from models.request import Request as RequestModel
 from models.user import User
 from models.response import Response
+from models.constants import RequestState
 
 logger = logging.getLogger(__name__)
 IMPORT_PATH = Path(settings.IMPORT_DIR) / "results"
@@ -39,17 +40,18 @@ def import_results_from_response_network(self):
         try:
             from services.import_storage import ImportStorageService
             
-            # Read latest results file (abstracted Local/FTP)
-            # Returns a list of dicts/lines
-            results_data = ImportStorageService.read_latest_file(db, "results")
+            # Read oldest unprocessed results file (abstracted Local/FTP)
+            file_info = ImportStorageService.get_next_unprocessed_file(db, "results")
             
-            if not results_data:
+            if not file_info or not file_info[0]:
                 return {
                     "status": "no_files",
                     "imported_at": datetime.utcnow().isoformat(),
                     "total_results": 0
                 }
-
+                
+            results_data, filename = file_info
+            
             total_imported = 0
             
             # Ensure results_data is a list (ImportStorageService handles parsing)
@@ -85,7 +87,7 @@ def import_results_from_response_network(self):
 
                     if request:
                         # Check if already completed to avoid overwrites
-                        if request.status in ["completed", "completed_success", "completed_error"]:
+                        if request.status in [RequestState.COMPLETED.value, RequestState.FAILED.value]:
                             continue
                             
                         # Double check response doesn't already exist
@@ -118,9 +120,9 @@ def import_results_from_response_network(self):
 
                         # Update request status based on has_error
                         if has_error:
-                            request.status = "completed_error"
+                            request.status = RequestState.FAILED.value
                         else:
-                            request.status = "completed_success"
+                            request.status = RequestState.COMPLETED.value
                         request.result_received_at = datetime.utcnow()
                         
                         # Invalidate cache for this request (async logic omitted/preserved)
@@ -141,6 +143,13 @@ def import_results_from_response_network(self):
                     continue
 
             db.commit()
+            
+            # Archive the file now that processing is complete
+            if filename:
+                try:
+                    ImportStorageService.archive_file(db, "results", filename)
+                except Exception as e:
+                    logger.error(f"Failed to archive results file {filename}: {e}")
 
             return {
                 "status": "success",

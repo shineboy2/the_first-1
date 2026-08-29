@@ -114,9 +114,12 @@ def export_request_types_to_request_network():
             local_path = local_base / "request_types"
             local_path.mkdir(parents=True, exist_ok=True)
             
+            # Save Data File (2-stage)
             file_path = local_path / filename
-            with open(file_path, "wb") as f:
+            tmp_file_path = local_path / f"{filename}.tmp"
+            with open(tmp_file_path, "wb") as f:
                 f.write(encrypted_bytes)
+            tmp_file_path.rename(file_path)
             
             logger.info(f"Exported {len(export_data)} request types to {file_path}")
             
@@ -172,7 +175,17 @@ def export_request_types_to_request_network():
                 except:
                     pass
             
-            ftp.storbinary(f"STOR {filename}", bio)
+            # Upload files (2-stage)
+            tmp_filename = f"{filename}.tmp"
+            ftp.storbinary(f"STOR {tmp_filename}", bio)
+            
+            # Rename to final name
+            try:
+                ftp.delete(filename)
+            except:
+                pass
+            ftp.rename(tmp_filename, filename)
+            
             ftp.quit()
             
             logger.info(f"Exported {len(export_data)} request types to FTP: {remote_path}/{filename}")

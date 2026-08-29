@@ -133,8 +133,8 @@ async def retry_request(
 
     # Reset request
     request_obj.status = 'pending'
-    request_obj.error_message = None
-    request_obj.retry_count = 0 
+    request_obj.last_error = None
+    request_obj.attempt_count = 0 
     request_obj.updated_at = datetime.utcnow()
     
     db.add(request_obj)
@@ -156,23 +156,12 @@ async def retry_all_failed(
         raise HTTPException(status_code=403, detail="Only admins can retry all requests")
         
     # Update all failed requests
-    # using explicit update for efficiency
-    from models.pydantic_schemas import Request as RequestModel # Ensure we use the model class for update
-    # The 'request_service' uses models.pydantic_schemas.py which seems to import the actual SQLA model?
-    # Let's check imports. 'models.pydantic_schemas' typically holds Pydantic schemas. 
-    # 'crud.requests' likely returns SQLA objects.
-    # We need the SQLA model class for bulk update.
-    # Looking at imports: 
-    # from models.pydantic_schemas import ( Request, ... ) -> This looks like Pydantic.
-    # Real SQLA Model is likely in `models.incoming_request` or similar based on previous steps.
-    # Let's import IncomingRequest directly to be safe.
-    
     from models.incoming_request import IncomingRequest
     
     result = db.query(IncomingRequest).filter(IncomingRequest.status == 'failed').update({
         IncomingRequest.status: 'pending',
-        IncomingRequest.error_message: None,
-        IncomingRequest.retry_count: 0,
+        IncomingRequest.last_error: None,
+        IncomingRequest.attempt_count: 0,
         IncomingRequest.updated_at: datetime.utcnow()
     }, synchronize_session=False)
     

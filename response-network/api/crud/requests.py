@@ -59,7 +59,8 @@ async def get_requests(
             "query_type": r.query_type,
             "query_params": r.query_params,
             "content": r.query_params, # Alias for frontend
-            "error": r.error_message,   # Alias for frontend
+            "error": getattr(r, 'last_error', getattr(r, 'error_message', None)),   # Alias for frontend
+            "last_error": getattr(r, 'last_error', None),
             "created_at": r.created_at,
             "updated_at": r.updated_at or r.created_at, # Fallback
             "progress": 0.0,
@@ -128,7 +129,8 @@ async def get_request(
         "query_type": r.query_type,
         "query_params": r.query_params,
         "content": r.query_params,
-        "error": r.error_message,
+        "error": getattr(r, 'last_error', getattr(r, 'error_message', None)),
+        "last_error": getattr(r, 'last_error', None),
         "created_at": r.created_at,
         "updated_at": r.updated_at or r.created_at,
         "progress": 0.0,

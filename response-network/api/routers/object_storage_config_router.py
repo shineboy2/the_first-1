@@ -6,8 +6,9 @@ Follows the same pattern as elasticsearch_config router.
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+from uuid import UUID
 
 from db.session import get_db_session
 from auth.dependencies import get_current_admin_user
@@ -19,6 +20,7 @@ from schemas.object_storage_config import (
     ObjectStorageConfigUpdate,
 )
 from services.object_storage_config_service import ObjectStorageConfigService
+from services.audit_service import create_audit_log
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +86,7 @@ async def get_object_storage_config(
     status_code=status.HTTP_201_CREATED,
 )
 async def create_object_storage_config(
+    request: Request,
     data: ObjectStorageConfigCreate,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     current_user: Annotated[User, Depends(get_current_admin_user)],
@@ -101,12 +104,15 @@ async def create_object_storage_config(
 
     config = await service.create_config(data)
     logger.info(f"Created Object Storage configuration: {config.id} ({config.name})")
+    
+    await create_audit_log(db, "OBJECT_STORAGE_CONFIG_CREATED", request, user_id=current_user.id, resource_type="ObjectStorageConfig", resource_id=str(config.id), meta={"name": config.name})
 
     return config.to_read()
 
 
 @router.put("/config/{config_id}", response_model=ObjectStorageConfigRead)
 async def update_object_storage_config(
+    request: Request,
     config_id: str,
     data: ObjectStorageConfigUpdate,
     db: Annotated[AsyncSession, Depends(get_db_session)],
@@ -133,20 +139,23 @@ async def update_object_storage_config(
 
     updated = await service.update_config(config_id, data)
     logger.info(f"Updated Object Storage configuration: {config_id}")
-
+    
+    await create_audit_log(db, "OBJECT_STORAGE_CONFIG_UPDATED", request, user_id=current_user.id, resource_type="ObjectStorageConfig", resource_id=str(updated.id), meta=data.model_dump(exclude_unset=True))
+    
     return updated.to_read()
 
 
 @router.delete("/config/{config_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_object_storage_config(
-    config_id: str,
+    request: Request,
+    config_id: UUID,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     current_user: Annotated[User, Depends(get_current_admin_user)],
 ):
     """Delete an Object Storage configuration."""
     service = ObjectStorageConfigService(db)
 
-    config = await service.get_config_by_id(config_id)
+    config = await service.get_config_by_id(str(config_id))
     if not config:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

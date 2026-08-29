@@ -56,12 +56,8 @@ def _load_request_types() -> List[dict]:
         return []
     
     try:
-        from core.encryption import decrypt_data
-        with open(file_path, "rb") as f:
-            file_bytes = f.read()
-        
-        decrypted_bytes = decrypt_data(file_bytes)
-        data = json.loads(decrypted_bytes.decode("utf-8"))
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
         
         # Handle both list format and wrapped format
         if isinstance(data, list):

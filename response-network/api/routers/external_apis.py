@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from typing import List
@@ -11,11 +11,13 @@ import crud.external_apis as crud_external_api
 from auth.dependencies import get_current_active_user, get_current_admin_user
 from models.user import User
 from models.profile_type_config import ProfileTypeConfig
+from services.audit_service import create_audit_log
 
 router = APIRouter(prefix="/external-apis", tags=["External APIs"])
 
 @router.post("/", response_model=ExternalAPIResponse, status_code=status.HTTP_201_CREATED)
 async def create_external_api(
+    request: Request,
     api_in: ExternalAPICreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
@@ -32,7 +34,9 @@ async def create_external_api(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="External API with this name already exists",
         )
-    return await crud_external_api.create_external_api(db, api_in)
+    created_api = await crud_external_api.create_external_api(db, api_in)
+    await create_audit_log(db, "EXTERNAL_API_CREATED", request, user_id=current_user.id, resource_type="ExternalAPI", resource_id=str(created_api.id), meta={"name": created_api.name})
+    return created_api
 
 @router.get("/", response_model=List[ExternalAPIResponse])
 async def read_external_apis(
@@ -59,6 +63,7 @@ async def read_external_api(
 
 @router.patch("/{api_id}", response_model=ExternalAPIResponse)
 async def update_external_api(
+    request: Request,
     api_id: UUID,
     api_in: ExternalAPIUpdate,
     db: AsyncSession = Depends(get_db),
@@ -68,10 +73,12 @@ async def update_external_api(
     db_api = await crud_external_api.update_external_api(db, api_id, api_in)
     if not db_api:
         raise HTTPException(status_code=404, detail="External API not found")
+    await create_audit_log(db, "EXTERNAL_API_UPDATED", request, user_id=current_user.id, resource_type="ExternalAPI", resource_id=str(db_api.id), meta=api_in.dict(exclude_unset=True))
     return db_api
 
 @router.delete("/{api_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_external_api(
+    request: Request,
     api_id: UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
@@ -80,6 +87,7 @@ async def delete_external_api(
     success = await crud_external_api.delete_external_api(db, api_id)
     if not success:
         raise HTTPException(status_code=404, detail="External API not found")
+    await create_audit_log(db, "EXTERNAL_API_DELETED", request, user_id=current_user.id, resource_type="ExternalAPI", resource_id=str(api_id))
     return None
 
 
@@ -98,6 +106,7 @@ class UpdateProfileExternalAPIAccess(BaseModel):
 
 @router.patch("/profile-types/{profile_type_name}/access", response_model=dict)
 async def update_profile_external_api_access(
+    request: Request,
     profile_type_name: str,
     access_update: UpdateProfileExternalAPIAccess,
     db: AsyncSession = Depends(get_db),
@@ -127,6 +136,8 @@ async def update_profile_external_api_access(
     db.add(profile)
     await db.commit()
     await db.refresh(profile)
+    
+    await create_audit_log(db, "PROFILE_API_ACCESS_UPDATED", request, user_id=current_user.id, resource_type="ProfileTypeConfig", resource_id=profile.name, meta={"allowed_external_apis": access_update.allowed_external_apis})
     
     return {
         "profile_type": profile.name,
@@ -175,6 +186,7 @@ class UserAccessResponse(BaseModel):
 
 @router.post("/{api_id}/user-access", response_model=List[UserAccessResponse])
 async def grant_user_access(
+    request: Request,
     api_id: UUID,
     data: GrantUserAccessRequest,
     db: AsyncSession = Depends(get_db),
@@ -224,6 +236,7 @@ async def grant_user_access(
         ))
     
     await db.commit()
+    await create_audit_log(db, "USER_API_ACCESS_GRANTED", request, user_id=current_user.id, resource_type="ExternalAPI", resource_id=str(db_api.id), meta={"api_name": db_api.name, "granted_to_user_ids": [str(uid) for uid in data.user_ids]})
     return responses
 
 
@@ -265,6 +278,7 @@ async def list_user_access(
 
 @router.delete("/{api_id}/user-access/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def revoke_user_access(
+    request: Request,
     api_id: UUID,
     user_id: UUID,
     db: AsyncSession = Depends(get_db),
@@ -297,5 +311,6 @@ async def revoke_user_access(
         flag_modified(user, "allowed_external_apis")
         db.add(user)
         await db.commit()
+        await create_audit_log(db, "USER_API_ACCESS_REVOKED", request, user_id=current_user.id, resource_type="ExternalAPI", resource_id=str(db_api.id), meta={"api_name": db_api.name, "revoked_from_user_id": str(user_id)})
     
     return None

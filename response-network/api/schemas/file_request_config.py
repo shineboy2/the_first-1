@@ -93,11 +93,11 @@ class FileRequestConfigCreate(BaseModel):
 
     # Request content
     content_format: str = Field("json", description="Format: json, csv, text, custom_template")
-    content_template: Optional[Dict[str, Any]] = None
+    content_template: Optional[Any] = None
     content_encoding: str = Field("utf-8", max_length=50)
 
     # Response parsing
-    response_parser_config: Optional[Dict[str, Any]] = None
+    response_parser_config: Optional[Any] = None
 
     # Timeout & retry
     response_timeout_minutes: int = Field(1440, ge=1, le=43200)
@@ -122,10 +122,10 @@ class FileRequestConfigUpdate(BaseModel):
 
     filename_template: Optional[str] = Field(None, min_length=1, max_length=500)
     content_format: Optional[str] = None
-    content_template: Optional[Dict[str, Any]] = None
+    content_template: Optional[Any] = None
     content_encoding: Optional[str] = Field(None, max_length=50)
 
-    response_parser_config: Optional[Dict[str, Any]] = None
+    response_parser_config: Optional[Any] = None
 
     response_timeout_minutes: Optional[int] = Field(None, ge=1, le=43200)
     max_retries: Optional[int] = Field(None, ge=0, le=10)
@@ -149,10 +149,10 @@ class FileRequestConfigRead(BaseModel):
 
     filename_template: str
     content_format: str
-    content_template: Optional[Dict[str, Any]]
+    content_template: Optional[Any]
     content_encoding: str
 
-    response_parser_config: Optional[Dict[str, Any]]
+    response_parser_config: Optional[Any]
 
     response_timeout_minutes: int
     max_retries: int

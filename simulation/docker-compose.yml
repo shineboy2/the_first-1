@@ -124,6 +124,12 @@ services:
       - BACKEND_CORS_ORIGINS=["http://localhost:3001"]
     ports:
       - "${REQ_API_PORT:-8001}:8000"
+    volumes:
+      - ../request-network/api:/app
+      - ../request-network/entrypoint.sh:/app/entrypoint.sh
+      - ./data/req_shared_data:/app/shared_data
+      - ./data/req_exports:/app/exports
+      - ./data/req_imports:/app/imports
     networks:
       - req_net
     depends_on:
@@ -161,6 +167,8 @@ services:
       - FTP_PASSWORD=${FTP_PASSWORD}
       - FTP_USE_TLS=${FTP_USE_TLS}
     volumes:
+      - ../request-network/api:/app
+      - ../request-network/entrypoint.sh:/app/entrypoint.sh
       - ./data/req_shared_data:/app/shared_data
       - ./data/req_exports:/app/exports
       - ./data/req_imports:/app/imports
@@ -200,6 +208,8 @@ services:
       - FTP_PASSWORD=${FTP_PASSWORD}
       - FTP_USE_TLS=${FTP_USE_TLS}
     volumes:
+      - ../request-network/api:/app
+      - ../request-network/entrypoint.sh:/app/entrypoint.sh
       - ./data/req_shared_data:/app/shared_data
       - ./data/req_exports:/app/exports
       - ./data/req_imports:/app/imports
@@ -315,6 +325,7 @@ services:
     ports:
       - "${RESP_API_PORT:-8000}:8000"
     volumes:
+      - ../response-network/api:/app
       - ./data/resp_shared_data:/app/shared_data
       - ./data/resp_exports:/app/exports
       - ./data/resp_imports:/app/imports
@@ -356,6 +367,7 @@ services:
       - FTP_PASSWORD=${FTP_PASSWORD}
       - FTP_USE_TLS=${FTP_USE_TLS}
     volumes:
+      - ../response-network/api:/app
       - ./data/resp_shared_data:/app/shared_data
       - ./data/resp_exports:/app/exports
       - ./data/resp_imports:/app/imports
@@ -395,6 +407,7 @@ services:
       - FTP_PASSWORD=${FTP_PASSWORD}
       - FTP_USE_TLS=${FTP_USE_TLS}
     volumes:
+      - ../response-network/api:/app
       - ./data/resp_shared_data:/app/shared_data
       - ./data/resp_exports:/app/exports
       - ./data/resp_imports:/app/imports

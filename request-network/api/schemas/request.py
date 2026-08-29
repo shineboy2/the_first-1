@@ -47,7 +47,7 @@ class RequestPublic(BaseModel):
     created_at: datetime
     exported_at: datetime | None = None
     result_received_at: datetime | None = None
-    error_message: str | None = None
+    last_error: str | None = None
     response: ResponsePublic | None = None
 
     @computed_field  # type: ignore

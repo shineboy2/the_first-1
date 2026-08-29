@@ -1115,6 +1115,7 @@ export const fileRequestConfigService = {
 export interface AuditLog {
   id: number;
   user_id: string | null;
+  username?: string | null;
   action: string;
   resource_type: string | null;
   resource_id: string | null;
@@ -1122,7 +1123,7 @@ export interface AuditLog {
   user_agent: string | null;
   request_data: any | null;
   response_status: number | null;
-  meta: any | null;
+  meta?: any | null;
   created_at: string;
 }
 

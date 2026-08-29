@@ -45,6 +45,7 @@ export default function FileRequestConfigsPage() {
     const [searchTerm, setSearchTerm] = useState("");
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editingConfig, setEditingConfig] = useState<FileRequestConfig | null>(null);
+    const [dialogError, setDialogError] = useState<string | null>(null);
     const [testDialogOpen, setTestDialogOpen] = useState(false);
     const [testJson, setTestJson] = useState("{}");
     const [testParserConfig, setTestParserConfig] = useState("{}");
@@ -115,6 +116,7 @@ export default function FileRequestConfigsPage() {
         });
         setContentTemplateText("");
         setParserConfigText("");
+        setDialogError(null);
         setDialogOpen(true);
     };
 
@@ -137,11 +139,12 @@ export default function FileRequestConfigsPage() {
             is_active: config.is_active,
         });
         setContentTemplateText(
-            config.content_template ? JSON.stringify(config.content_template, null, 2) : ""
+            config.content_template ? (typeof config.content_template === 'string' ? config.content_template : JSON.stringify(config.content_template, null, 2)) : ""
         );
         setParserConfigText(
-            config.response_parser_config ? JSON.stringify(config.response_parser_config, null, 2) : ""
+            config.response_parser_config ? (typeof config.response_parser_config === 'string' ? config.response_parser_config : JSON.stringify(config.response_parser_config, null, 2)) : ""
         );
+        setDialogError(null);
         setDialogOpen(true);
     };
 
@@ -149,14 +152,25 @@ export default function FileRequestConfigsPage() {
         try {
             const saveData: any = { ...form };
 
-            // Parse JSON fields
             if (contentTemplateText.trim()) {
-                saveData.content_template = JSON.parse(contentTemplateText);
+                try {
+                    saveData.content_template = JSON.parse(contentTemplateText);
+                } catch (e) {
+                    if (form.content_format === "json") {
+                        throw new SyntaxError("فرمت JSON برای محتوای درخواست نادرست است.");
+                    } else {
+                        saveData.content_template = contentTemplateText;
+                    }
+                }
             } else {
                 saveData.content_template = null;
             }
             if (parserConfigText.trim()) {
-                saveData.response_parser_config = JSON.parse(parserConfigText);
+                try {
+                    saveData.response_parser_config = JSON.parse(parserConfigText);
+                } catch (e) {
+                    throw new SyntaxError("فرمت JSON برای تنظیمات پارسر پاسخ نادرست است.");
+                }
             } else {
                 saveData.response_parser_config = null;
             }
@@ -170,9 +184,9 @@ export default function FileRequestConfigsPage() {
             fetchConfigs();
         } catch (err: any) {
             if (err instanceof SyntaxError) {
-                setError("فرمت JSON نادرست است. لطفاً بررسی کنید.");
+                setDialogError(err.message || "فرمت JSON نادرست است. لطفاً بررسی کنید.");
             } else {
-                setError(err?.response?.data?.detail || "خطا در ذخیره پیکربندی");
+                setDialogError(err?.response?.data?.detail || "خطا در ذخیره پیکربندی");
             }
         }
     };
@@ -432,6 +446,14 @@ export default function FileRequestConfigsPage() {
                             تنظیمات تولید فایل درخواست و پارس پاسخ JSON.
                         </DialogDescription>
                     </DialogHeader>
+
+                    {dialogError && (
+                        <Alert variant="destructive" className="mt-2">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertTitle>خطا</AlertTitle>
+                            <AlertDescription>{dialogError}</AlertDescription>
+                        </Alert>
+                    )}
 
                     <div className="space-y-6 py-4">
                         {/* Basic info */}

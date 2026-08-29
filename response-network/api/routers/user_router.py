@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from datetime import datetime
@@ -14,6 +14,7 @@ from auth.dependencies import get_current_admin_user, get_current_user
 from crud import users as user_service
 from schemas.request_access import UserRequestAccessCreate, UserRequestAccessRead, UserRequestAccessReadSimple, UserRequestAccessInput
 from workers.celery_app import celery_app
+from services.audit_service import create_audit_log
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -40,6 +41,7 @@ async def list_users(
 
 @router.post("", response_model=User)
 async def create_user(
+    request: Request,
     user_in: UserCreate,
     db: AsyncSession = Depends(get_db),
     current_user: UserModel = Depends(get_current_admin_user)
@@ -54,15 +56,20 @@ async def create_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot create a new admin user. Only one admin is allowed."
         )
-    return await user_service.create_user(db, user_in)
+    user = await user_service.create_user(db, user_in)
+    await create_audit_log(db, "USER_CREATED", request, user_id=current_user.id, resource_type="User", resource_id=str(user.id), meta={"username": user.username, "role": user.profile_type})
+    return user
 
 @router.post("/force-create", response_model=User)
 async def force_create_user(
+    request: Request,
     user_in: UserCreate,
     db: AsyncSession = Depends(get_db),
     current_user: UserModel = Depends(get_current_admin_user)
 ):
-    return await user_service.create_user(db, user_in)
+    user = await user_service.create_user(db, user_in)
+    await create_audit_log(db, "USER_CREATED", request, user_id=current_user.id, resource_type="User", resource_id=str(user.id), meta={"username": user.username, "role": user.profile_type, "force": True})
+    return user
 
 
 @router.get("/me", response_model=dict)
@@ -192,6 +199,7 @@ async def revoke_request_type_access(
 
 @router.put("/{user_id}", response_model=User)
 async def update_user(
+    request: Request,
     user_id: str,
     user_in: UserUpdate,
     db: AsyncSession = Depends(get_db),
@@ -212,10 +220,13 @@ async def update_user(
             detail="Cannot change a user to admin."
         )
         
-    return await user_service.update_user(db, user, user_in)
+    updated_user = await user_service.update_user(db, user, user_in)
+    await create_audit_log(db, "USER_UPDATED", request, user_id=current_user.id, resource_type="User", resource_id=str(updated_user.id), meta=user_in.dict(exclude_unset=True))
+    return updated_user
 
 @router.delete("/{user_id}")
 async def delete_user(
+    request: Request,
     user_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: UserModel = Depends(get_current_admin_user)
@@ -228,10 +239,12 @@ async def delete_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     await user_service.delete_user(db, user_id)
+    await create_audit_log(db, "USER_DELETED", request, user_id=current_user.id, resource_type="User", resource_id=user_id, meta={"username": user.username})
     return {"message": "User deleted successfully"}
 
 @router.post("/{user_id}/suspend")
 async def suspend_user(
+    request: Request,
     user_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: UserModel = Depends(get_current_admin_user)
@@ -244,10 +257,12 @@ async def suspend_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     await user_service.update_user_status(db, user_id, "suspended")
+    await create_audit_log(db, "USER_SUSPENDED", request, user_id=current_user.id, resource_type="User", resource_id=user_id, meta={"username": user.username})
     return {"message": "User suspended successfully"}
 
 @router.post("/{user_id}/activate")
 async def activate_user(
+    request: Request,
     user_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: UserModel = Depends(get_current_admin_user)
@@ -260,6 +275,7 @@ async def activate_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     await user_service.update_user_status(db, user_id, "active")
+    await create_audit_log(db, "USER_ACTIVATED", request, user_id=current_user.id, resource_type="User", resource_id=user_id, meta={"username": user.username})
     return {"message": "User activated successfully"}
 
 
@@ -322,6 +338,7 @@ async def get_users_export_status(
 
 @router.post("/{user_id}/reset-password", response_model=dict)
 async def reset_user_password(
+    request: Request,
     user_id: str,
     request_body: dict,
     db: AsyncSession = Depends(get_db),
@@ -393,6 +410,8 @@ async def reset_user_password(
         sync_task_id = None
         sync_status = f"sync_error: {str(e)}"
     
+    await create_audit_log(db, "PASSWORD_RESET", request, user_id=current_user.id, resource_type="User", resource_id=user_id, meta={"username": user.username})
+    
     return {
         "success": True,
         "message": f"Password reset for user {user.username}",
@@ -422,6 +441,7 @@ async def reset_user_password(
 
 @router.post("/change-password", response_model=dict)
 async def change_own_password(
+    request: Request,
     request_body: dict,
     db: AsyncSession = Depends(get_db),
     current_user: UserModel = Depends(get_current_admin_user)
@@ -475,6 +495,8 @@ async def change_own_password(
     current_user.hashed_password = get_password_hash(new_password)
     db.add(current_user)
     await db.commit()
+    
+    await create_audit_log(db, "PASSWORD_CHANGED", request, user_id=current_user.id, resource_type="User", resource_id=str(current_user.id))
     
     return {
         "success": True,

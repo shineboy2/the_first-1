@@ -28,6 +28,13 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog";
 
 import adminApi, { AuditLog } from "@/lib/services/admin-api";
 
@@ -45,6 +52,9 @@ function AuditLogsContent() {
         try {
             setLoading(true);
             setError(null);
+
+
+
             const data = await adminApi.auditLogService.getLogs({ limit: 100 });
             setLogs(data.items || []);
         } catch (err: any) {
@@ -63,7 +73,7 @@ function AuditLogsContent() {
 
     const filteredLogs = logs.filter(log => 
         (log.action && log.action.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (log.user_id && log.user_id.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (log.username && log.username.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (log.ip_address && log.ip_address.includes(searchTerm))
     );
 
@@ -134,8 +144,10 @@ function AuditLogsContent() {
                                     <TableRow>
                                         <TableHead>عملیات</TableHead>
                                         <TableHead>آی‌پی</TableHead>
-                                        <TableHead>شناسه کاربر</TableHead>
+                                        <TableHead>کاربر</TableHead>
+                                        <TableHead>موجودیت</TableHead>
                                         <TableHead>تاریخ</TableHead>
+                                        <TableHead>جزئیات</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -156,14 +168,56 @@ function AuditLogsContent() {
                                                         {log.action}
                                                     </Badge>
                                                 </TableCell>
-                                                <TableCell dir="ltr" className="text-right font-mono text-sm">
+                                                <TableCell dir="ltr" className="font-mono text-sm">
                                                     {log.ip_address || "-"}
                                                 </TableCell>
-                                                <TableCell dir="ltr" className="text-right text-xs text-muted-foreground">
-                                                    {log.user_id || "نامشخص"}
+                                                <TableCell className="text-sm font-semibold">
+                                                    {log.username || "نامشخص"}
                                                 </TableCell>
-                                                <TableCell dir="ltr" className="text-right text-sm">
+                                                <TableCell className="max-w-[150px] truncate" title={log.resource_id || undefined}>
+                                                    {log.resource_type ? (
+                                                        <span className="text-xs text-muted-foreground">
+                                                            {log.resource_type} {log.resource_id ? `(${log.resource_id})` : ''}
+                                                        </span>
+                                                    ) : "-"}
+                                                </TableCell>
+                                                <TableCell dir="ltr" className="text-sm">
                                                     {new Date(log.created_at).toLocaleString("fa-IR")}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Dialog>
+                                                        <DialogTrigger asChild>
+                                                            <Button variant="outline" size="sm">مشاهده</Button>
+                                                        </DialogTrigger>
+                                                        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto" dir="rtl">
+                                                            <DialogHeader>
+                                                                <DialogTitle>جزئیات لاگ {log.action}</DialogTitle>
+                                                            </DialogHeader>
+                                                            <div className="mt-4 space-y-4 text-sm" dir="ltr">
+                                                                {log.meta && Object.keys(log.meta).length > 0 && (
+                                                                    <div>
+                                                                        <h4 className="font-semibold mb-2">تغییرات (Meta):</h4>
+                                                                        <pre className="bg-gray-100 dark:bg-gray-800 p-4 rounded-md overflow-x-auto text-xs">
+                                                                            {JSON.stringify(log.meta, null, 2)}
+                                                                        </pre>
+                                                                    </div>
+                                                                )}
+                                                                {log.request_data && Object.keys(log.request_data).length > 0 && (
+                                                                    <div>
+                                                                        <h4 className="font-semibold mb-2">داده‌های درخواست:</h4>
+                                                                        <pre className="bg-gray-100 dark:bg-gray-800 p-4 rounded-md overflow-x-auto text-xs">
+                                                                            {JSON.stringify(log.request_data, null, 2)}
+                                                                        </pre>
+                                                                    </div>
+                                                                )}
+                                                                {(!log.meta || Object.keys(log.meta).length === 0) && (!log.request_data || Object.keys(log.request_data).length === 0) && (
+                                                                    <div className="text-center text-gray-500 py-4" dir="rtl">
+                                                                        جزئیات بیشتری برای این لاگ ثبت نشده است.
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </DialogContent>
+                                                    </Dialog>
                                                 </TableCell>
                                             </TableRow>
                                         ))

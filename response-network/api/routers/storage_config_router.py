@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel, Field
@@ -8,6 +8,7 @@ from models.user import User
 from models.settings import Settings
 from auth.dependencies import get_current_admin_user
 from core.dependencies import get_db
+from services.audit_service import create_audit_log
 
 
 router = APIRouter(prefix="/settings/storage", tags=["settings"])
@@ -71,6 +72,7 @@ OPERATION_TO_KEY = {
 
 @router.post("/", response_model=StorageConfigRead, status_code=status.HTTP_201_CREATED)
 async def create_or_update_storage_config(
+    request: Request,
     config: StorageConfigCreate,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
@@ -111,6 +113,8 @@ async def create_or_update_storage_config(
         await db.commit()
         await db.refresh(existing_setting)
         
+        await create_audit_log(db, "STORAGE_CONFIG_UPDATED", request, user_id=current_user.id, resource_type="Settings", resource_id=settings_key, meta={"operation_type": config.operation_type})
+        
         return StorageConfigRead(
             operation_type=config.operation_type,
             **config_value,
@@ -127,6 +131,8 @@ async def create_or_update_storage_config(
         db.add(new_setting)
         await db.commit()
         await db.refresh(new_setting)
+        
+        await create_audit_log(db, "STORAGE_CONFIG_CREATED", request, user_id=current_user.id, resource_type="Settings", resource_id=settings_key, meta={"operation_type": config.operation_type})
         
         return StorageConfigRead(
             operation_type=config.operation_type,
@@ -197,6 +203,7 @@ async def list_all_storage_configs(
 
 @router.delete("/{operation_type}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_storage_config(
+    request: Request,
     operation_type: str,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
@@ -223,6 +230,8 @@ async def delete_storage_config(
     
     await db.delete(setting)
     await db.commit()
+    
+    await create_audit_log(db, "STORAGE_CONFIG_DELETED", request, user_id=current_user.id, resource_type="Settings", resource_id=settings_key, meta={"operation_type": operation_type})
     
     return None
 

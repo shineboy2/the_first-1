@@ -49,6 +49,7 @@ class Request(BaseModel):
     result: Optional[Dict] = None
     error: Optional[str] = None
     error_message: Optional[str] = None
+    last_error: Optional[str] = None
     has_error: bool = False
 
     processing_time: Optional[float] = None # IncomingRequest doesn't have it directly?
@@ -65,7 +66,7 @@ class Request(BaseModel):
     @property
     def effective_status(self) -> str:
         """
-        Compute effective status considering has_error and error_message.
+        Compute effective status considering has_error, last_error, and error_message.
         - pending: request waiting to be processed
         - processing: request being executed
         - completed_success: response received without errors
@@ -76,7 +77,7 @@ class Request(BaseModel):
             return "failed"
         
         if self.status.lower() == "completed":
-            if self.has_error or self.error_message:
+            if self.has_error or self.last_error or self.error_message or self.error:
                 return "completed_error"
             else:
                 return "completed_success"

@@ -19,6 +19,7 @@ from models.query_result import QueryResult
 from models.settings import Settings as SettingsModel
 from models.sync_history import SyncHistory
 from models.ftp_profile import FTPProfile
+from models.constants import RequestState
 
 logger = logging.getLogger(__name__)
 
@@ -62,9 +63,10 @@ def export_completed_results(self):
              return {"status": "skipped", "reason": "disabled"}
 
         # Get results that haven't been exported
+        # Use SKIP LOCKED to avoid multiple workers picking up the same results
         results = db.query(QueryResult).join(IncomingRequest).filter(
             QueryResult.exported_at.is_(None)
-        ).limit(50).all()
+        ).with_for_update(skip_locked=True, of=QueryResult).limit(50).all()
         
         if not results:
             sync_history.status = "skipped"
@@ -85,11 +87,11 @@ def export_completed_results(self):
             # Determine if result has error
             has_error = False
             if request:
-                has_error = getattr(request, 'has_error', False) or request.status == 'failed'
+                has_error = getattr(request, 'has_error', False) or request.status == RequestState.FAILED.value
             
             export_list.append({
                 "request_id": str(res.original_request_id),  # Map back to original ID for Request Network
-                "status": request.status if request else "completed",
+                "status": request.status if request else RequestState.COMPLETED.value,
                 "has_error": has_error,
                 "result_data": res.result_data,
             })
@@ -112,11 +114,13 @@ def export_completed_results(self):
             local_path = Path(export_config.get("local_path", "/app/exports/results"))
             if not local_path.exists():
                 local_path.mkdir(parents=True, exist_ok=True)
-            
+            # Save Data File (2-stage)
             file_path = local_path / filename
+            tmp_file_path = local_path / f"{filename}.tmp"
             encrypted_bytes = encrypt_data(jsonl_content.encode('utf-8'))
-            with open(file_path, "wb") as f:
+            with open(tmp_file_path, "wb") as f:
                 f.write(encrypted_bytes)
+            tmp_file_path.rename(file_path)
             saved_path = str(file_path)
             logger.info(f"Exported results locally to {saved_path}")
 
@@ -159,8 +163,17 @@ def export_completed_results(self):
                     ftp.cwd(remote_path)
                 except Exception as e:
                     logger.warning(f"Failed to create/cwd to {remote_path}: {e}")
+            # Upload files (2-stage)
+            tmp_filename = f"{filename}.tmp"
+            ftp.storbinary(f"STOR {tmp_filename}", bio)
             
-            ftp.storbinary(f"STOR {filename}", bio)
+            # Rename to final name
+            try:
+                ftp.delete(filename)
+            except:
+                pass
+            ftp.rename(tmp_filename, filename)
+            
             ftp.quit()
             saved_path = f"ftp://{host}/{remote_path}/{filename}"
             logger.info(f"Exported results to FTP: {saved_path}")

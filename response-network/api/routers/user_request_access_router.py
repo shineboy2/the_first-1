@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -16,14 +16,17 @@ from schemas.request_access import (
     UserRequestAccessRead,
     UserRequestAccessUpdate
 )
+from services.audit_service import create_audit_log
 
 router = APIRouter(prefix="/user-request-access", tags=["user request access"])
 
 
 @router.post("/", response_model=UserRequestAccessRead, dependencies=[Depends(get_current_admin_user)])
 async def create_user_request_access(
+    request: Request,
     access: UserRequestAccessCreate,
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_admin_user)
 ):
     """Create a new user request access (Admin only)"""
     # Verify user exists
@@ -59,6 +62,9 @@ async def create_user_request_access(
     db.add(db_access)
     await db.commit()
     await db.refresh(db_access)
+    
+    await create_audit_log(db, "USER_REQUEST_ACCESS_GRANTED", request, user_id=current_user.id, resource_type="UserRequestAccess", resource_id=str(db_access.id), meta={"granted_user_id": str(access.user_id), "request_type_id": str(access.request_type_id)})
+    
     return db_access
 
 
@@ -106,9 +112,11 @@ async def get_user_request_access(
 
 @router.patch("/{access_id}", response_model=UserRequestAccessRead, dependencies=[Depends(get_current_admin_user)])
 async def update_user_request_access(
+    request: Request,
     access_id: UUID,
     access: UserRequestAccessUpdate,
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_admin_user)
 ):
     """Update a user request access entry (Admin only)"""
     result = await db.execute(select(UserRequestAccess).where(UserRequestAccess.id == access_id))
@@ -126,13 +134,18 @@ async def update_user_request_access(
     
     await db.commit()
     await db.refresh(db_access)
+    
+    await create_audit_log(db, "USER_REQUEST_ACCESS_UPDATED", request, user_id=current_user.id, resource_type="UserRequestAccess", resource_id=str(db_access.id), meta=access.dict(exclude_unset=True))
+    
     return db_access
 
 
 @router.delete("/{access_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(get_current_admin_user)])
 async def delete_user_request_access(
+    request: Request,
     access_id: UUID,
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_admin_user)
 ):
     """Delete a user request access entry (Admin only)"""
     result = await db.execute(select(UserRequestAccess).where(UserRequestAccess.id == access_id))
@@ -146,3 +159,5 @@ async def delete_user_request_access(
     
     await db.delete(access)
     await db.commit()
+    
+    await create_audit_log(db, "USER_REQUEST_ACCESS_REVOKED", request, user_id=current_user.id, resource_type="UserRequestAccess", resource_id=str(access_id), meta={"revoked_user_id": str(access.user_id), "request_type_id": str(access.request_type_id)})

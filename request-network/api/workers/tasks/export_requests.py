@@ -18,6 +18,7 @@ from core.config import settings
 from models.request import Request as RequestModel
 from models.user import User
 from models.settings import Settings as SettingsModel
+from models.constants import RequestState
 
 logger = logging.getLogger(__name__)
 
@@ -61,13 +62,23 @@ def export_pending_requests(self):
              logger.info("Request export is disabled.")
              return {"status": "skipped", "reason": "disabled"}
 
-        # 1. Query pending requests
-        pending_requests = db.query(RequestModel).options(joinedload(RequestModel.user)).filter(
-            RequestModel.status == "pending"
+        # 1. Query pending requests (Atomic Claim)
+        from datetime import timedelta
+        from sqlalchemy import or_
+        now = datetime.utcnow()
+        worker_uuid = self.request.id or str(uuid.uuid4())
+
+        claim_query = db.query(RequestModel).options(joinedload(RequestModel.user)).filter(
+            or_(
+                RequestModel.status == RequestState.PENDING.value,
+                (RequestModel.status == RequestState.EXPORTING.value) & (RequestModel.lease_until < now)
+            )
         ).order_by(
             RequestModel.priority.desc(),
             RequestModel.created_at.asc()
-        ).limit(500).all()
+        ).with_for_update(skip_locked=True, of=RequestModel).limit(500)
+
+        pending_requests = claim_query.all()
 
         if not pending_requests:
             return {
@@ -75,6 +86,14 @@ def export_pending_requests(self):
                 "exported_at": datetime.utcnow().isoformat(),
                 "total_requests": 0
             }
+
+        # Mark them as EXPORTING to release DB lock but retain logical lock
+        for req in pending_requests:
+            req.status = RequestState.EXPORTING.value
+            req.worker_id = worker_uuid
+            req.lease_until = now + timedelta(minutes=10)
+            
+        db.commit()
 
 
         # Get current timestamp for filename
@@ -129,16 +148,20 @@ def export_pending_requests(self):
             if not local_path.exists():
                 local_path.mkdir(parents=True, exist_ok=True)
             
-            # Save Data File
+            # Save Data File (2-stage)
             file_path = local_path / filename
-            with open(file_path, "w", encoding="utf-8") as f:
+            tmp_file_path = local_path / f"{filename}.tmp"
+            with open(tmp_file_path, "w", encoding="utf-8") as f:
                 f.write(file_data)
+            tmp_file_path.rename(file_path)
             saved_path = str(file_path)
             
-            # Save Meta File
+            # Save Meta File (2-stage)
             meta_path = local_path / meta_filename
-            with open(meta_path, "wb") as f:
+            tmp_meta_path = local_path / f"{meta_filename}.tmp"
+            with open(tmp_meta_path, "wb") as f:
                 f.write(meta_bytes)
+            tmp_meta_path.rename(meta_path)
             saved_meta_path = str(meta_path)
             
             logger.info(f"Exported requests locally to {saved_path}")
@@ -176,9 +199,25 @@ def export_pending_requests(self):
                 except Exception as e:
                     logger.warning(f"Failed to create/cwd to {remote_path}: {e}")
             
-            # Upload files
-            ftp.storbinary(f"STOR {filename}", bio_data)
-            ftp.storbinary(f"STOR {meta_filename}", bio_meta)
+            # Upload files (2-stage)
+            tmp_filename = f"{filename}.tmp"
+            tmp_meta_filename = f"{meta_filename}.tmp"
+            
+            ftp.storbinary(f"STOR {tmp_filename}", bio_data)
+            ftp.storbinary(f"STOR {tmp_meta_filename}", bio_meta)
+            
+            # Rename to final names
+            try:
+                ftp.delete(filename)  # Delete if exists
+            except:
+                pass
+            ftp.rename(tmp_filename, filename)
+            
+            try:
+                ftp.delete(meta_filename) # Delete if exists
+            except:
+                pass
+            ftp.rename(tmp_meta_filename, meta_filename)
             
             ftp.quit()
             saved_path = f"ftp://{host}/{remote_path}/{filename}"
@@ -187,7 +226,7 @@ def export_pending_requests(self):
 
         # 4. Update request status
         for req in pending_requests:
-            req.status = "exported"
+            req.status = RequestState.EXPORTED.value
             req.exported_at = datetime.utcnow()
             req.export_batch_id = batch_id
         

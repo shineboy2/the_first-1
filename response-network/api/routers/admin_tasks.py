@@ -1,13 +1,16 @@
 """
 Admin endpoints for task queue management
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from typing import List
 
 from auth.dependencies import get_current_user
 from models.user import User
+from db.session import get_db_session
+from sqlalchemy.ext.asyncio import AsyncSession
 from schemas.task_management import QueueStats, TaskInfo, TaskAction, WorkerStats
 from workers.celery_app import celery_app
+from services.audit_service import create_audit_log
 import redis
 
 router = APIRouter(
@@ -171,8 +174,10 @@ async def get_pending_tasks(
 
 @router.post("/tasks/{task_id}/skip", response_model=TaskAction)
 async def skip_task(
+    request: Request,
     task_id: str,
-    admin: User = Depends(check_admin)
+    admin: User = Depends(check_admin),
+    db: AsyncSession = Depends(get_db_session)
 ):
     """
     Skip کردن یک task (بدون اجرا)
@@ -183,12 +188,16 @@ async def skip_task(
         # Revoke task (باعث می‌شود task اجرا نشود)
         celery_app.control.revoke(task_id, terminate=True)
         
-        return TaskAction(
+        response = TaskAction(
             task_id=task_id,
             action="skip",
             status="success",
             message=f"Task {task_id} با موفقیت skip شد"
         )
+        
+        await create_audit_log(db, "TASK_SKIPPED", request, user_id=admin.id, resource_type="Task", resource_id=task_id)
+        
+        return response
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -198,8 +207,10 @@ async def skip_task(
 
 @router.delete("/queue/clear", response_model=dict)
 async def clear_queue(
+    request: Request,
     confirm: bool = False,
-    admin: User = Depends(check_admin)
+    admin: User = Depends(check_admin),
+    db: AsyncSession = Depends(get_db_session)
 ):
     """
     پاک کردن تمام tasks از صف
@@ -218,11 +229,15 @@ async def clear_queue(
         count = redis_client.llen("celery")
         redis_client.delete("celery")
         
-        return {
+        response = {
             "status": "success",
             "message": f"{count} tasks از صف حذف شد",
             "cleared_count": count
         }
+        
+        await create_audit_log(db, "QUEUE_CLEARED", request, user_id=admin.id, resource_type="Queue", meta={"cleared_count": count})
+        
+        return response
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -232,8 +247,10 @@ async def clear_queue(
 
 @router.post("/tasks/{task_id}/retry", response_model=TaskAction)
 async def retry_task(
+    request: Request,
     task_id: str,
-    admin: User = Depends(check_admin)
+    admin: User = Depends(check_admin),
+    db: AsyncSession = Depends(get_db_session)
 ):
     """
     دوبارہ اجرای یک task
@@ -277,12 +294,16 @@ async def retry_task(
         # Call task again
         celery_app.send_task(task_name, args=args, kwargs=kwargs)
         
-        return TaskAction(
+        response = TaskAction(
             task_id=task_id,
             action="retry",
             status="success",
             message=f"Task {task_name} دوباره صف‌بندی شد"
         )
+        
+        await create_audit_log(db, "TASK_RETRIED", request, user_id=admin.id, resource_type="Task", resource_id=task_id, meta={"task_name": task_name})
+        
+        return response
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

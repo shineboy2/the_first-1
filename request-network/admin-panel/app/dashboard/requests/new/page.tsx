@@ -65,12 +65,20 @@ export default function NewRequestPage() {
     const loadRequestTypes = async () => {
         try {
             setInitLoading(true);
-            // TODO: Temporary fix to enforce manual entry until request types are synced from Response Network
+            const types = await requestService.getRequestTypes();
+            setRequestTypes(types || []);
+            if (types && types.length > 0) {
+                setSelectedType(types[0].name);
+                setServiceName(types[0].name);
+            } else {
+                setSelectedType("_raw");
+                setServiceName("");
+            }
+        } catch (err) {
+            console.error("Error loading request types:", err);
             setRequestTypes([]);
             setSelectedType("_raw");
             setServiceName("");
-        } catch (err) {
-            console.error("Error loading request types:", err);
         } finally {
             setInitLoading(false);
         }

@@ -5,7 +5,7 @@ Admin-only endpoints for creating, listing, testing, and managing FTP connection
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.dependencies import get_db
@@ -19,12 +19,14 @@ from schemas.ftp_profile import (
 )
 import crud.ftp_profiles as crud_ftp
 from services.ftp_profile_service import FTPProfileService
+from services.audit_service import create_audit_log
 
 router = APIRouter(prefix="/ftp-profiles", tags=["FTP Profiles"])
 
 
 @router.post("/", response_model=FTPProfileRead, status_code=status.HTTP_201_CREATED)
 async def create_ftp_profile(
+    request: Request,
     profile_in: FTPProfileCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
@@ -36,7 +38,9 @@ async def create_ftp_profile(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"FTP profile with name '{profile_in.name}' already exists",
         )
-    return await crud_ftp.create_ftp_profile(db, profile_in)
+    created_profile = await crud_ftp.create_ftp_profile(db, profile_in)
+    await create_audit_log(db, "FTP_PROFILE_CREATED", request, user_id=current_user.id, resource_type="FTPProfile", resource_id=str(created_profile.id), meta={"name": created_profile.name})
+    return created_profile
 
 
 @router.get("/", response_model=List[FTPProfileRead])
@@ -69,6 +73,7 @@ async def get_ftp_profile(
 
 @router.patch("/{profile_id}", response_model=FTPProfileRead)
 async def update_ftp_profile(
+    request: Request,
     profile_id: UUID,
     profile_in: FTPProfileUpdate,
     db: AsyncSession = Depends(get_db),
@@ -90,11 +95,15 @@ async def update_ftp_profile(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="FTP profile not found",
         )
+    
+    await create_audit_log(db, "FTP_PROFILE_UPDATED", request, user_id=current_user.id, resource_type="FTPProfile", resource_id=str(updated.id), meta=profile_in.dict(exclude_unset=True))
+    
     return updated
 
 
 @router.delete("/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_ftp_profile(
+    request: Request,
     profile_id: UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
@@ -107,6 +116,9 @@ async def delete_ftp_profile(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="FTP profile not found",
         )
+    
+    await create_audit_log(db, "FTP_PROFILE_DELETED", request, user_id=current_user.id, resource_type="FTPProfile", resource_id=str(profile_id))
+    
     return None
 
 

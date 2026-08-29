@@ -1,7 +1,7 @@
 import uuid
 from typing import List, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy import select, and_, delete
@@ -26,13 +26,14 @@ from schemas.profile_type_request_access import (
     ProfileTypeRequestAccessCreate,
     ProfileTypeRequestAccessRead
 )
-from auth.dependencies import get_current_admin_user, get_current_active_user
 from core.dependencies import get_db
+from auth.dependencies import get_current_active_user, get_current_admin_user
+from services.audit_service import create_audit_log
 router = APIRouter(prefix="/request-types", tags=["request-types"])
 
 
-@router.post("/", response_model=RequestTypeRead, status_code=status.HTTP_201_CREATED)
 async def create_request_type(
+    request: Request,
     req_type: RequestTypeCreateInitial,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
@@ -88,11 +89,15 @@ async def create_request_type(
     result = await db.execute(query)
     db_obj = result.scalar_one()
     
+    
+    await create_audit_log(db, "REQUEST_TYPE_CREATED", request, user_id=current_user.id, resource_type="RequestType", resource_id=str(new_type.id), meta={"name": new_type.name})
+    
     return db_obj
 
 
 @router.put("/{request_type_id}", response_model=RequestTypeRead)
 async def update_request_type(
+    request: Request,
     request_type_id: UUID,
     update_data: RequestTypeUpdate,
     db: AsyncSession = Depends(get_db),
@@ -134,11 +139,15 @@ async def update_request_type(
         
     await db.commit()
     await db.refresh(req_type)
+    
+    await create_audit_log(db, "REQUEST_TYPE_UPDATED", request, user_id=current_user.id, resource_type="RequestType", resource_id=str(request_type_id), meta=update_dict)
+    
     return req_type
 
 
 @router.put("/{type_id}/params", response_model=RequestTypeRead)
 async def configure_request_type_params(
+    request: Request,
     type_id: UUID,
     config: RequestTypeConfigureParams,
     db: AsyncSession = Depends(get_db),
@@ -236,12 +245,16 @@ async def configure_request_type_params(
     result = await db.execute(query)
     db_obj = result.scalar_one()
     
+    
+    await create_audit_log(db, "REQUEST_TYPE_PARAMS_CONFIGURED", request, user_id=current_user.id, resource_type="RequestType", resource_id=str(type_id))
+    
     return db_obj
 
 
 # Step 3: Configure Elasticsearch query
 @router.put("/{request_type_id}/query", response_model=RequestTypeRead)
 async def configure_request_type_query(
+    request: Request,
     request_type_id: UUID,
     data: RequestTypeConfigureQuery,
     current_user: User = Depends(get_current_admin_user),
@@ -274,12 +287,16 @@ async def configure_request_type_query(
     
     await db.commit()
     await db.refresh(db_obj)
+    
+    await create_audit_log(db, "REQUEST_TYPE_QUERY_CONFIGURED", request, user_id=current_user.id, resource_type="RequestType", resource_id=str(request_type_id))
+    
     return db_obj
 
 
 # User Access Management
 @router.post("/{request_type_id}/access", response_model=List[UserRequestAccessRead])
 async def grant_access_to_users(
+    request: Request,
     request_type_id: UUID,
     data: BulkUserRequestAccessCreate,
     current_user: User = Depends(get_current_admin_user),
@@ -341,6 +358,9 @@ async def grant_access_to_users(
         ))
     )
     
+    
+    await create_audit_log(db, "REQUEST_TYPE_USER_ACCESS_GRANTED", request, user_id=current_user.id, resource_type="RequestType", resource_id=str(request_type_id), meta={"granted_user_ids": [str(uid) for uid in data.user_ids]})
+    
     return result.scalars().all()
 
 
@@ -364,6 +384,7 @@ async def list_user_access(
 
 @router.delete("/{request_type_id}/access/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def revoke_user_access(
+    request: Request,
     request_type_id: UUID,
     user_id: UUID,
     current_user: User = Depends(get_current_admin_user),
@@ -387,6 +408,9 @@ async def revoke_user_access(
         )
     
     await db.commit()
+    
+    await create_audit_log(db, "REQUEST_TYPE_USER_ACCESS_REVOKED", request, user_id=current_user.id, resource_type="RequestType", resource_id=str(request_type_id), meta={"revoked_user_id": str(user_id)})
+    
     return None
 
 
@@ -429,6 +453,7 @@ async def get_request_type(
 
 @router.delete("/{request_type_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_request_type(
+    request: Request,
     request_type_id: UUID,
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
@@ -443,11 +468,15 @@ async def delete_request_type(
     
     db_obj.is_active = False
     await db.commit()
+    
+    await create_audit_log(db, "REQUEST_TYPE_DELETED", request, user_id=current_user.id, resource_type="RequestType", resource_id=str(request_type_id))
+    
     return None
 
 
 @router.post("/{request_type_id}/profile-access", response_model=List[ProfileTypeRequestAccessRead])
 async def grant_profile_type_access(
+    request: Request,
     request_type_id: UUID,
     data: ProfileTypeRequestAccessCreate,
     current_user: User = Depends(get_current_admin_user),
@@ -490,6 +519,9 @@ async def grant_profile_type_access(
     for record in access_records:
         await db.refresh(record)
     
+    
+    await create_audit_log(db, "REQUEST_TYPE_PROFILE_ACCESS_GRANTED", request, user_id=current_user.id, resource_type="RequestType", resource_id=str(request_type_id), meta={"granted_profile_type_ids": data.profile_type_ids})
+    
     return access_records
 
 
@@ -512,6 +544,7 @@ async def list_profile_type_access(
 
 @router.delete("/{request_type_id}/profile-access/{profile_type_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def revoke_profile_type_access(
+    request: Request,
     request_type_id: UUID,
     profile_type_id: str,
     current_user: User = Depends(get_current_admin_user),
@@ -535,4 +568,7 @@ async def revoke_profile_type_access(
         )
     
     await db.commit()
+    
+    await create_audit_log(db, "REQUEST_TYPE_PROFILE_ACCESS_REVOKED", request, user_id=current_user.id, resource_type="RequestType", resource_id=str(request_type_id), meta={"revoked_profile_type_id": profile_type_id})
+    
     return None

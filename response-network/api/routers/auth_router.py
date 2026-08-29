@@ -1,7 +1,7 @@
 from datetime import timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Body, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Body, Request, Form
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -27,19 +27,7 @@ async def read_users_me(
     return current_user
 
 
-from datetime import datetime, timezone
-from models.audit_log import AuditLog
-
-async def _log_audit(db: AsyncSession, user_id, action: str, client_ip: str, request: Request, request_data: dict = None):
-    audit_log = AuditLog(
-        user_id=user_id,
-        action=action,
-        ip_address=client_ip,
-        user_agent=request.headers.get("user-agent"),
-        request_data=request_data
-    )
-    db.add(audit_log)
-    await db.commit()
+from services.audit_service import create_audit_log
 
 @router.post("/login")
 async def login(
@@ -92,7 +80,7 @@ async def login(
 
     # 2. Check if user exists, is active, and password is correct
     if not user:
-        await _log_audit(db, None, "LOGIN_FAILED", client_ip, request, {"reason": "user_not_found", "attempted_username": username})
+        await create_audit_log(db, "LOGIN_FAILED", request, user_id=None, meta={"reason": "user_not_found", "attempted_username": username})
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -100,7 +88,7 @@ async def login(
         )
         
     if not user.is_active or not verify_password(password, user.hashed_password):
-        await _log_audit(db, user.id, "LOGIN_FAILED", client_ip, request, {"reason": "invalid_password" if user.is_active else "inactive_user"})
+        await create_audit_log(db, "LOGIN_FAILED", request, user_id=user.id, meta={"reason": "invalid_password" if user.is_active else "inactive_user"})
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -111,13 +99,13 @@ async def login(
     # Note: User model in response-network doesn't have allowed_ips by default maybe?
     # Let me assume it does, as I will add it if it doesn't.
     if hasattr(user, 'allowed_ips') and user.allowed_ips and client_ip not in user.allowed_ips:
-        await _log_audit(db, user.id, "LOGIN_BLOCKED", client_ip, request, {"reason": "ip_not_allowed", "ip": client_ip})
+        await create_audit_log(db, "LOGIN_BLOCKED", request, user_id=user.id, meta={"reason": "ip_not_allowed", "ip": client_ip})
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Login not permitted from this IP address.",
         )
         
-    await _log_audit(db, user.id, "LOGIN_SUCCESS", client_ip, request)
+    await create_audit_log(db, "LOGIN_SUCCESS", request, user_id=user.id)
 
     # Create token data with user_id and scopes
     token_data = {
@@ -152,8 +140,89 @@ async def login(
     }
 
 
+@router.post(
+    "/token",
+    summary="Machine/API Login (No Captcha)",
+    description="Login for servers/APIs that cannot solve captchas.",
+)
+async def machine_login(
+    request: Request,
+    db: AsyncSession = Depends(get_db_session),
+    username: str = Body(None),
+    password: str = Body(None),
+    username_form: str = Form(None, alias="username"),
+    password_form: str = Form(None, alias="password"),
+):
+    client_ip = request.headers.get("x-forwarded-for")
+    if client_ip:
+        client_ip = client_ip.split(",")[0].strip()
+    else:
+        client_ip = request.client.host if request.client else "unknown"
+
+    content_type = request.headers.get("content-type", "")
+    
+    if "application/x-www-form-urlencoded" in content_type:
+        user_param = username_form
+        pass_param = password_form
+    else:
+        user_param = username
+        pass_param = password
+        
+    if not user_param or not pass_param:
+        raise HTTPException(status_code=400, detail="username and password are required")
+
+    query = select(User).where(
+        (User.username == user_param) | (User.email == user_param)
+    )
+    result = await db.execute(query)
+    user = result.scalars().first()
+
+    if not user:
+        await create_audit_log(db, "LOGIN_FAILED", request, user_id=None, meta={"reason": "user_not_found", "attempted_username": user_param, "source": "machine"})
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not user.is_active or not verify_password(pass_param, user.hashed_password):
+        await create_audit_log(db, "LOGIN_FAILED", request, user_id=user.id, meta={"reason": "invalid_password", "source": "machine"})
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if hasattr(user, 'allowed_ips') and user.allowed_ips and client_ip not in user.allowed_ips:
+        await create_audit_log(db, "LOGIN_BLOCKED", request, user_id=user.id, meta={"reason": "ip_not_allowed", "ip": client_ip, "source": "machine"})
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Login not permitted from this IP address.",
+        )
+
+    await create_audit_log(db, "LOGIN_SUCCESS", request, user_id=user.id, meta={"source": "machine"})
+
+    token_data = {
+        "user_id": str(user.id),
+        "scopes": ["admin"] if user.profile_type == "admin" else ["user"]
+    }
+    
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = security.create_access_token(
+        data=token_data,
+        expires_delta=access_token_expires
+    )
+
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
 @router.post("/logout", summary="Admin Logout")
-async def logout_user(response: Response):
+async def logout_user(
+    response: Response,
+    request: Request,
+    db: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(security.get_current_user)
+):
     """
     Logs out the current user by deleting the HttpOnly access_token cookie.
     """
@@ -163,4 +232,7 @@ async def logout_user(response: Response):
         secure=not settings.DEV_MODE,
         samesite="lax",
     )
+    
+    await create_audit_log(db, "LOGOUT_SUCCESS", request, user_id=current_user.id)
+    
     return {"message": "Logout successful"}

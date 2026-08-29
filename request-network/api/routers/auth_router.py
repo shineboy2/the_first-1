@@ -22,7 +22,7 @@ from auth.schemas import Token
 from auth.dependencies import get_current_user
 from db.session import get_db_session
 from models.user import User
-from models.audit_log import AuditLog
+from services.audit_service import create_audit_log
 from routers.captcha_router import verify_captcha
 from core.config import settings
 
@@ -78,7 +78,7 @@ async def login_for_access_token(
 
     # If user doesn't exist, we don't want to leak this information, but we log it
     if not user:
-        await _log_audit(db, None, "LOGIN_FAILED", client_ip, request, {"reason": "user_not_found", "attempted_username": username})
+        await create_audit_log(db, "LOGIN_FAILED", request, meta={"reason": "user_not_found", "attempted_username": username, "ip": client_ip})
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -88,7 +88,7 @@ async def login_for_access_token(
     # 2. Check if locked out
     now = datetime.now(timezone.utc)
     if user.locked_until and user.locked_until > now:
-        await _log_audit(db, user.id, "LOGIN_BLOCKED", client_ip, request, {"reason": "account_locked"})
+        await create_audit_log(db, "LOGIN_BLOCKED", request, user_id=user.id, meta={"reason": "account_locked", "ip": client_ip})
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Account is locked. Try again later.",
@@ -101,9 +101,9 @@ async def login_for_access_token(
         if user.failed_login_attempts >= MAX_FAILED_ATTEMPTS:
             user.locked_until = now + timedelta(minutes=LOCKOUT_MINUTES)
             user.failed_login_attempts = 0 # Reset counter after locking
-            await _log_audit(db, user.id, "ACCOUNT_LOCKED", client_ip, request, {"reason": "max_failed_attempts"})
+            await create_audit_log(db, "ACCOUNT_LOCKED", request, user_id=user.id, meta={"reason": "max_failed_attempts", "ip": client_ip})
         else:
-            await _log_audit(db, user.id, "LOGIN_FAILED", client_ip, request, {"reason": "invalid_password"})
+            await create_audit_log(db, "LOGIN_FAILED", request, user_id=user.id, meta={"reason": "invalid_password", "ip": client_ip})
         
         await db.commit()
         raise HTTPException(
@@ -120,14 +120,14 @@ async def login_for_access_token(
     
     # Check IP restriction (Fallback to allow if not set, as per user request)
     if user.allowed_ips and client_ip not in user.allowed_ips:
-        await _log_audit(db, user.id, "LOGIN_BLOCKED", client_ip, request, {"reason": "ip_not_allowed", "ip": client_ip})
+        await create_audit_log(db, "LOGIN_BLOCKED", request, user_id=user.id, meta={"reason": "ip_not_allowed", "ip": client_ip})
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Login not permitted from this IP address.",
         )
 
     await db.commit()
-    await _log_audit(db, user.id, "LOGIN_SUCCESS", client_ip, request)
+    await create_audit_log(db, "LOGIN_SUCCESS", request, user_id=user.id, meta={"ip": client_ip})
 
     # 5. Handle Concurrent Sessions (Invalidate previous active session for this user)
     # We store the latest token JTI (or just a marker) in Redis. 
@@ -210,7 +210,7 @@ async def machine_login(
     user = result.scalars().first()
 
     if not user:
-        await _log_audit(db, None, "LOGIN_FAILED", client_ip, request, {"reason": "user_not_found", "attempted_username": username, "source": "machine"})
+        await create_audit_log(db, "LOGIN_FAILED", request, meta={"reason": "user_not_found", "attempted_username": username, "source": "machine", "ip": client_ip})
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -220,7 +220,7 @@ async def machine_login(
     # Check lockout
     now = datetime.now(timezone.utc)
     if user.locked_until and user.locked_until > now:
-        await _log_audit(db, user.id, "LOGIN_BLOCKED", client_ip, request, {"reason": "account_locked", "source": "machine"})
+        await create_audit_log(db, "LOGIN_BLOCKED", request, user_id=user.id, meta={"reason": "account_locked", "source": "machine", "ip": client_ip})
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is locked. Try again later.",
@@ -232,9 +232,9 @@ async def machine_login(
         if user.failed_login_attempts >= MAX_FAILED_ATTEMPTS:
             user.locked_until = now + timedelta(minutes=LOCKOUT_MINUTES)
             user.failed_login_attempts = 0
-            await _log_audit(db, user.id, "ACCOUNT_LOCKED", client_ip, request, {"reason": "max_failed_attempts", "source": "machine"})
+            await create_audit_log(db, "ACCOUNT_LOCKED", request, user_id=user.id, meta={"reason": "max_failed_attempts", "source": "machine", "ip": client_ip})
         else:
-            await _log_audit(db, user.id, "LOGIN_FAILED", client_ip, request, {"reason": "invalid_password", "source": "machine"})
+            await create_audit_log(db, "LOGIN_FAILED", request, user_id=user.id, meta={"reason": "invalid_password", "source": "machine", "ip": client_ip})
         await db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -250,14 +250,14 @@ async def machine_login(
 
     # IP restriction check
     if user.allowed_ips and client_ip not in user.allowed_ips:
-        await _log_audit(db, user.id, "LOGIN_BLOCKED", client_ip, request, {"reason": "ip_not_allowed", "ip": client_ip, "source": "machine"})
+        await create_audit_log(db, "LOGIN_BLOCKED", request, user_id=user.id, meta={"reason": "ip_not_allowed", "ip": client_ip, "source": "machine"})
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Login not permitted from this IP address.",
         )
 
     await db.commit()
-    await _log_audit(db, user.id, "LOGIN_SUCCESS", client_ip, request, {"source": "machine"})
+    await create_audit_log(db, "LOGIN_SUCCESS", request, user_id=user.id, meta={"source": "machine", "ip": client_ip})
 
     # Invalidate old session
     old_session_key = f"active_session:{user.id}"
@@ -308,21 +308,6 @@ async def logout(
             pass
             
     client_ip = request.client.host if request.client else "unknown"
-    await _log_audit(db, current_user.id, "LOGOUT", client_ip, request)
+    await create_audit_log(db, "LOGOUT", request, user_id=current_user.id, meta={"ip": client_ip})
     return {"message": "Successfully logged out"}
 
-
-async def _log_audit(db: AsyncSession, user_id: uuid.UUID | None, action: str, ip: str, request: Request, meta: dict = None):
-    try:
-        log_entry = AuditLog(
-            user_id=user_id,
-            action=action,
-            ip_address=ip,
-            user_agent=request.headers.get("user-agent", "unknown"),
-            meta=meta or {}
-        )
-        db.add(log_entry)
-        await db.commit()
-    except Exception as e:
-        log.error("Failed to write audit log", action=action, error=str(e))
-        await db.rollback()

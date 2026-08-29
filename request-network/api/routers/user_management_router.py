@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated, Any, Dict, List
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -14,6 +14,7 @@ from schemas.user import User as UserSchema
 from schemas.api_key import APIKeyCreate, APIKeyRead, APIKeyGenerated
 from pydantic import BaseModel
 from rate_limiter import RateLimiter
+from services.audit_service import create_audit_log
 import secrets
 
 router = APIRouter(
@@ -79,8 +80,10 @@ async def get_user_details(
 
 @router.post("/users/{user_id}/activate", response_model=UserSchema)
 async def activate_user(
+    request: Request,
     user_id: uuid.UUID,
     db: AsyncSession = Depends(get_db_session),
+    current_admin: User = Depends(get_current_user)
 ):
     """
     Activate a user account. Admins only.
@@ -96,13 +99,18 @@ async def activate_user(
     db.add(user)
     await db.commit()
     await db.refresh(user)
+    
+    await create_audit_log(db, "USER_ACTIVATED", request, user_id=current_admin.id, resource_type="User", resource_id=str(user_id))
+    
     return user
 
 
 @router.post("/users/{user_id}/deactivate", response_model=UserSchema)
 async def deactivate_user(
+    request: Request,
     user_id: uuid.UUID,
     db: AsyncSession = Depends(get_db_session),
+    current_admin: User = Depends(get_current_user)
 ):
     """
     Deactivate a user account. Admins only.
@@ -118,6 +126,9 @@ async def deactivate_user(
     db.add(user)
     await db.commit()
     await db.refresh(user)
+    
+    await create_audit_log(db, "USER_DEACTIVATED", request, user_id=current_admin.id, resource_type="User", resource_id=str(user_id))
+    
     return user
 
 
@@ -126,9 +137,11 @@ class UserIPUpdate(BaseModel):
 
 @router.put("/users/{user_id}/allowed-ips", response_model=UserSchema)
 async def update_user_allowed_ips(
+    request: Request,
     user_id: uuid.UUID,
     ip_update: UserIPUpdate,
     db: AsyncSession = Depends(get_db_session),
+    current_admin: User = Depends(get_current_user)
 ):
     """
     Update a user's allowed IPs. Admins only.
@@ -143,6 +156,9 @@ async def update_user_allowed_ips(
     db.add(user)
     await db.commit()
     await db.refresh(user)
+    
+    await create_audit_log(db, "USER_ALLOWED_IPS_UPDATED", request, user_id=current_admin.id, resource_type="User", resource_id=str(user_id), meta={"allowed_ips": ip_update.allowed_ips})
+    
     return user
 
 
@@ -164,9 +180,11 @@ async def get_user_api_keys_admin(
 
 @router.post("/users/{user_id}/api-keys", response_model=APIKeyGenerated, status_code=status.HTTP_201_CREATED)
 async def create_user_api_key_admin(
+    request: Request,
     user_id: uuid.UUID,
     api_key_in: APIKeyCreate,
     db: AsyncSession = Depends(get_db_session),
+    current_admin: User = Depends(get_current_user)
 ):
     """Create a new API key for a specific user. Admins only."""
     from routers.api_key_router import API_KEY_PREFIX, hash_api_key
@@ -188,6 +206,9 @@ async def create_user_api_key_admin(
     await db.commit()
     await db.refresh(db_api_key)
 
+    
+    await create_audit_log(db, "API_KEY_CREATED", request, user_id=current_admin.id, resource_type="ApiKey", resource_id=str(db_api_key.id), meta={"name": api_key_in.name, "target_user_id": str(user_id)})
+
     return APIKeyGenerated(
         id=db_api_key.id,
         name=db_api_key.name,
@@ -198,9 +219,11 @@ async def create_user_api_key_admin(
 
 @router.delete("/users/{user_id}/api-keys/{api_key_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def revoke_user_api_key_admin(
+    request: Request,
     user_id: uuid.UUID,
     api_key_id: uuid.UUID,
     db: AsyncSession = Depends(get_db_session),
+    current_admin: User = Depends(get_current_user)
 ):
     """Revoke an API key for a specific user. Admins only."""
     stmt = select(ApiKey).where(ApiKey.id == api_key_id, ApiKey.user_id == user_id)
@@ -212,4 +235,7 @@ async def revoke_user_api_key_admin(
 
     db_api_key.is_active = False
     await db.commit()
+    
+    await create_audit_log(db, "API_KEY_REVOKED", request, user_id=current_admin.id, resource_type="ApiKey", resource_id=str(api_key_id), meta={"target_user_id": str(user_id)})
+    
     return None

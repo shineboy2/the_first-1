@@ -214,6 +214,8 @@ export function ConfigureParametersDialog({
                 field_mapping: fieldMapping,
                 index_mapping: indexMapping,
                 object_storage_mapping: objectStorageMappingObj,
+                object_storage_config_id: requestType.object_storage_config_id || null,
+                file_request_config_id: requestType.file_request_config_id || null,
                 // Preserve current is_active and is_public values from the existing requestType
                 // These are managed separately (e.g. activate/deactivate buttons), not in this form
                 is_active: requestType.is_active ?? false,
@@ -326,7 +328,7 @@ export function ConfigureParametersDialog({
                                 />
                             )}
 
-                            {executionMethod === "elasticsearch" && (
+                            {(executionMethod === "elasticsearch" || executionMethod === "object_storage") && (
                                 <FormField
                                     control={form.control}
                                     name="target_index"
