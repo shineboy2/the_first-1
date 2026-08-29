@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: response_postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME:-response_network}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_PORT: ${DB_PORT:-5432}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - response_network
+
+  # Redis (Broker & Result Backend)
+  redis:
+    image: redis:7-alpine
+    container_name: response_redis
+    command: redis-server --port ${REDIS_PORT:-6380}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "${REDIS_PORT:-6380}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - response_network
+
+  # Elasticsearch (Search Engine)
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: response_elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200 >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - response_network
+
+  flower:
+    image: mher/flower
+    container_name: response_flower
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6380/0
+      - FLOWER_PORT=5555
+    depends_on:
+      - redis
+    networks:
+      - response_network
+
+  flower-request:
+    image: mher/flower
+    container_name: request_flower
+    environment:
+      - CELERY_BROKER_URL=redis://172.17.0.1:6381/0
+      - FLOWER_PORT=5555
+    networks:
+      - response_network
+
+volumes:
+  postgres_data:
+  redis_data:
+  elasticsearch_data:
+
+networks:
+  response_network:
+    driver: bridge

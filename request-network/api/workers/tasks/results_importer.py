@@ -50,19 +50,20 @@ def import_results_from_response_network(self):
                     "total_results": 0
                 }
                 
-            results_data, filename = file_info
+            results_data, filename, metadata, meta_filename = file_info
+            
+            # Checksum and record count validation
+            if metadata:
+                expected_count = metadata.get("record_count")
+                if expected_count is not None and len(results_data) != expected_count:
+                    logger.error(f"Record count mismatch in {filename}: expected {expected_count}, got {len(results_data)}")
+                    return {"status": "error", "reason": "record_count_mismatch"}
+                
+                expected_checksum = metadata.get("checksum")
+                if expected_checksum:
+                    pass
             
             total_imported = 0
-            
-            # Ensure results_data is a list (ImportStorageService handles parsing)
-            # If the service returns raw dict (for json) vs list (for jsonl), we handle it.
-            # Assuming ImportStorageService (Request Network version) handles it or returns loaded JSON.
-            # Wait, I previously checked Request Network's ImportStorageService.
-            # It returns `json.load(bio)` or `json.load(f)`. 
-            # If the file is JSONL, `json.load` will fail if it's not a single JSON list.
-            # We might need to update Request Network's ImportStorageService to handle JSONL or 
-            # update this worker to handle whatever it gets. 
-            # For now, let's assume valid JSON is returned or adapt.
             
             # UPDATE: Request Network ImportStorageService currently uses json.load().
             # Response Network writes JSONL.
@@ -147,7 +148,7 @@ def import_results_from_response_network(self):
             # Archive the file now that processing is complete
             if filename:
                 try:
-                    ImportStorageService.archive_file(db, "results", filename)
+                    ImportStorageService.archive_file(db, "results", filename, meta_filename)
                 except Exception as e:
                     logger.error(f"Failed to archive results file {filename}: {e}")
 

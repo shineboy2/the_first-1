@@ -1,5 +1,6 @@
 from datetime import datetime
 import json
+import hashlib
 from pathlib import Path
 import os
 import uuid
@@ -101,7 +102,25 @@ def export_completed_results(self):
         for item in export_list:
             jsonl_content += json.dumps(item) + "\n"
         
+
         filename = f"results_{timestamp}.jsonl"
+        meta_filename = f"results_{timestamp}.meta.json"
+        
+        file_bytes = jsonl_content.encode('utf-8')
+        file_hash = hashlib.sha256(file_bytes).hexdigest()
+        
+        metadata = {
+            "batch_id": str(batch_id),
+            "batch_type": "results",
+            "filename": filename,
+            "file_size": len(file_bytes),
+            "record_count": len(results),
+            "checksum": file_hash,
+            "exported_at": datetime.utcnow().isoformat(),
+            "version": 1
+        }
+        meta_bytes = json.dumps(metadata, ensure_ascii=False, indent=2).encode('utf-8')
+        
         export_type = export_config.get("storage_type", "local") # Use "storage_type" to match new config format
         
         # Fallback to "destination_type" if "storage_type" missing (key name changed in different versions)
@@ -114,36 +133,14 @@ def export_completed_results(self):
             local_path = Path(export_config.get("local_path", "/app/exports/results"))
             if not local_path.exists():
                 local_path.mkdir(parents=True, exist_ok=True)
+
             # Save Data File (2-stage)
             file_path = local_path / filename
             tmp_file_path = local_path / f"{filename}.tmp"
-            encrypted_bytes = encrypt_data(jsonl_content.encode('utf-8'))
-            with open(tmp_file_path, "wb") as f:
-                f.write(encrypted_bytes)
-            tmp_file_path.rename(file_path)
-            saved_path = str(file_path)
-            logger.info(f"Exported results locally to {saved_path}")
-
-        elif export_type == "ftp":
-            ftp_profile_id = export_config.get("ftp_profile_id")
-            if not ftp_profile_id:
-                raise ValueError("FTP Profile not configured")
-            
-            ftp_profile = db.query(FTPProfile).filter(
-                FTPProfile.id == ftp_profile_id, FTPProfile.is_active == True
-            ).first()
-            if not ftp_profile:
-                raise ValueError("FTP Profile not found or inactive")
-                
-            host = ftp_profile.host
-            user = ftp_profile.username
-            passwd = ftp_profile.password
-            port = ftp_profile.port or 21
-            remote_path = export_config.get("ftp_path", "/results")
-            use_tls = ftp_profile.use_tls
 
             encrypted_bytes = encrypt_data(jsonl_content.encode('utf-8'))
             bio = io.BytesIO(encrypted_bytes)
+            meta_bio = io.BytesIO(meta_bytes)
             
             if use_tls:
                 ftp = ftplib.FTP_TLS()
@@ -165,7 +162,10 @@ def export_completed_results(self):
                     logger.warning(f"Failed to create/cwd to {remote_path}: {e}")
             # Upload files (2-stage)
             tmp_filename = f"{filename}.tmp"
+            tmp_meta_filename = f"{meta_filename}.tmp"
+            
             ftp.storbinary(f"STOR {tmp_filename}", bio)
+            ftp.storbinary(f"STOR {tmp_meta_filename}", meta_bio)
             
             # Rename to final name
             try:
@@ -173,6 +173,12 @@ def export_completed_results(self):
             except:
                 pass
             ftp.rename(tmp_filename, filename)
+            
+            try:
+                ftp.delete(meta_filename)
+            except:
+                pass
+            ftp.rename(tmp_meta_filename, meta_filename)
             
             ftp.quit()
             saved_path = f"ftp://{host}/{remote_path}/{filename}"
