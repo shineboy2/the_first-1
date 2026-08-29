@@ -19,6 +19,7 @@ from .file_request_config import FileRequestConfig
 from .file_request import FileRequest
 from .object_storage_config import ObjectStorageConfig
 from .audit_log import AuditLog
+from .file_import_state import FileImportState
 
 __all__ = [
     "User",
@@ -42,5 +43,6 @@ __all__ = [
     "FileRequestConfig",
     "FileRequest",
     "ObjectStorageConfig",
+    "FileImportState",
 ]
 

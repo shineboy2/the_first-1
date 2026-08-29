@@ -7,6 +7,7 @@ from .audit_log import AuditLog
 from .batch import ImportBatch, ExportBatch
 from .settings import Settings, UserSettings
 from .sync_history import SyncHistory
+from .file_import_state import FileImportState
 
 __all__ = [
     "User",
@@ -19,5 +20,6 @@ __all__ = [
     "ExportBatch",
     "Settings",
     "UserSettings",
-    "SyncHistory"
+    "SyncHistory",
+    "FileImportState"
 ]
